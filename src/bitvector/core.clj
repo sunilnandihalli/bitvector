@@ -1,13 +1,54 @@
 (ns bitvector.core
-  (:require [clojure.java.io :as io])
+  (:require [clojure.java.io :as io]
+            [clojure.contrib.combinatorics :as comb]
+            [clojure.data.finger-tree :as ft])
   (:import [java.io BufferedReader BufferedWriter FileReader])
-  (:use iterate))
+  (:use iterate bitvector.debug))
 
+(defn permutations-repeated
+  ([items n]
+     (if (= n 1) (map list (keys items))
+         (let [func-perm-pairs (map (fn [x] [(partial cons x) (if (> (items x) 1) (update-in items [x] dec) (dissoc items x))]) (keys items))
+               permutations-per-pair (let [n-1 (dec n)] (fn [[f rest-of-items]] (map f (permutations-repeated rest-of-items n-1))))]
+           (mapcat permutations-per-pair func-perm-pairs))))
+  ([items] (permutations-repeated items (count items))))
+
+(defn center-of-tree [tree]
+  (let [leaves (keep #(if (= 1 (count (second %))) (update-in % [1] seq)) tree)
+        new-tree (reduce (fn [mp [lid [vid]]] (-> (dissoc mp lid) (update-in [vid] #(disj % lid)))) tree leaves)]
+    (if (<= (count new-tree) 2) new-tree (center-of-tree new-tree))))
+
+(defn children-trees [tree root]
+  (if-let [children (seq (tree root))]
+    (thrush-with-sym [x] (dissoc tree root)
+      (reduce (fn [tr cid] (update-in tr [cid] #(disj % root))) x children)
+      (map vector (repeat x) children))))
+
+(defn cannonical-value-of-tree-rooted-at [tree root]
+  (if-let [child-trees (children-trees tree root)]
+    (set (map #(apply cannonical-value-of-tree-rooted-at %) child-trees)) #{}))
+
+(defn tree-isomorphic? [free-tr1 free-tr2]
+  (let [[c1 c2] (map center-of-tree [free-tr1 free-tr2])]
+    (case (map count [c1 c2])
+          [1 1] (apply = (map (fn [tr c] (cannonical-value-of-tree-rooted-at tr (ffirst c)) [free-tr1 free-tr2] [c1 c2])))
+          [2 2] (let [[r1 r1-d] (keys c1) [r2 r2-d] (keys c2)
+                      [can1 can2] (map cannonical-value-of-tree-rooted-at [free-tr1 free-tr2] [r1 r2])]
+                  (or (= can1 can2)
+                      (let [can1-d (cannonical-value-of-tree-rooted-at free-tr1 r1-d)]
+                        (= can1-d can2)))))))
+                      
+#_(let [pruf-code (random-tree 10)
+        g (prufer-code-to-graph-rep pruf-code)]
+    (map #(let [g1 (prufer-code-to-graph-rep %1)] (tree-isomorphic? g g1))
+         (permutations-repeated (frequencies pruf-code))))
+           
 (def mutation-probability 0.2)
 
 (defn a-update [arr [:as keys] f]
   (let [v (f (apply aget arr keys))]
     (apply aset arr (conj keys v)) arr))
+
 #_(let [tree-ex [3 9 4 5 1 6 7 8 2 0]
         pruf-code [2 8 9 7 6 1 5 4]]
     (for-each-edge println pruf-code))
@@ -39,26 +80,40 @@
                        rest-of-degree-1-nodes (disj degree-1-nodes first-degree-1-node)]
                    (recur (if (= (aget new-degree cur-code) 1) (conj rest-of-degree-1-nodes cur-code) rest-of-degree-1-nodes)
                           new-degree rest-of-prufer-code nf-arg))))))
-  ([f prufer-code] (for-each-edge (fn [_ ed] (f ed)) nil prufer-code)))
+  ([f prufer-code] (for-each-edge #(f %2) nil prufer-code)))
 
 (defn graph-to-prufer-code [graph]
-  (let [leaf-nodes (into (sorted-map) (filter #(= 1 (count (graph (second %)))) graph))]
+  (let [leaf-nodes (into (sorted-map) (filter #(= 1 (count (second %))) graph))]
     (loop [cur-leaf-nodes leaf-nodes cur-prufer-code [] cur-graph graph]
       (if (= 2 (count cur-graph)) cur-prufer-code
           (let [[id1 neighbouring-nodes] (first cur-leaf-nodes)
                 [id2] (seq neighbouring-nodes)
-                rest-of-leaf-nodes (disj cur-leaf-nodes id1)
-                new-graph (-> (disj cur-graph id1) (update-in id2 #(disj % id1)))
+                rest-of-leaf-nodes (dissoc cur-leaf-nodes id1)
+                new-graph (-> (dissoc cur-graph id1) (update-in [id2] #(disj % id1)))
                 new-prufer-code (conj cur-prufer-code id2)
-                new-leaf-nodes (into rest-of-leaf-nodes (let [l (find new-graph id2)] (if (= 1 (count (second l))) l)))]
+                new-leaf-nodes (into rest-of-leaf-nodes (let [l (find new-graph id2)] (if (= 1 (count (second l))) [l])))]
             (recur new-leaf-nodes new-prufer-code new-graph))))))
-        
-            
-      
+
+#_(repeatedly 1000 #(let [n (+ 2 (rand-int 1000))
+                          g1 (random-tree n)
+                          trf (random-node-map n)
+                          trf-inv (invert-node-map trf)
+                          x (map trf-inv trf)
+                          g2 (thrush-with-sym [x] g1
+                               (prufer-code-to-graph-rep x)
+                               (transform-graph x trf)
+                               (graph-to-prufer-code x)
+                               (map trf-inv x))]
+                      (apply = (map frequencies [g1 g2]))))
+
+(defn number-of-tree-isomorphic-to-the-tree-represented-by-prufer-code [pruf-code])
+(defn invert-node-map [node-map-vec]
+  (let [n (count node-map-vec)] (reduce (fn [mp i] (assoc mp (node-map-vec i) i)) (vec (repeat n 0))  (range n))))
 (defn random-tree [n] (repeatedly (- n 2) #(rand-int n)))
 (defn random-node-map [n] (shuffle (range n)))
 (defn add-edge-to-tree [tree [id1 id2]] (merge-with into {id1 #{id2} id2 #{id1}} tree))
 (defn transform-graph [tree trf] (into {} (map (fn [[k vs]] [(trf k) (into #{} (map trf vs))]) tree)))
+(defn prufer-code-to-graph-rep [pruf-code] (for-each-edge add-edge-to-tree  {} pruf-code))
                                         
 (defn check-isomorphism [pruf-code node-map]
   (let [graph1 (for-each-edge add-edge-to-tree {} pruf-code)
@@ -73,7 +128,6 @@
     (println ['rand-node-map rand-node-map])
     (check-isomorphism rand-tree rand-node-map))
     
-
 (defn read-bit-vectors [fname]
   (let [d (with-open [rdr (clojure.java.io/reader fname)]
             (->> (line-seq rdr) (map #(boolean-array (map {\0 false \1 true} %))) into-array))
