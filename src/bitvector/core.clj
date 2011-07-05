@@ -11,12 +11,13 @@
          (let [func-perm-pairs (map (fn [x] [(partial cons x) (if (> (items x) 1) (update-in items [x] dec) (dissoc items x))]) (keys items))
                permutations-per-pair (let [n-1 (dec n)] (fn [[f rest-of-items]] (map f (permutations-repeated rest-of-items n-1))))]
            (mapcat permutations-per-pair func-perm-pairs))))
-  ([items] (permutations-repeated items (count items))))
+  ([items] (permutations-repeated items (apply + (vals items)))))
 
 (defn center-of-tree [tree]
+  {:pre [#_(do (println tree) true)]}
   (let [leaves (keep #(if (= 1 (count (second %))) (update-in % [1] seq)) tree)
         new-tree (reduce (fn [mp [lid [vid]]] (-> (dissoc mp lid) (update-in [vid] #(disj % lid)))) tree leaves)]
-    (if (<= (count new-tree) 2) new-tree (center-of-tree new-tree))))
+    (if (<= (count new-tree) 2) new-tree (recur new-tree))))
 
 (defn children-trees [tree root]
   (if-let [children (seq (tree root))]
@@ -31,17 +32,19 @@
 (defn tree-isomorphic? [free-tr1 free-tr2]
   (let [[c1 c2] (map center-of-tree [free-tr1 free-tr2])]
     (case (map count [c1 c2])
-          [1 1] (apply = (map (fn [tr c] (cannonical-value-of-tree-rooted-at tr (ffirst c)) [free-tr1 free-tr2] [c1 c2])))
+          [1 1] (apply = (map (fn [tr c] (cannonical-value-of-tree-rooted-at tr (ffirst c))) [free-tr1 free-tr2] [c1 c2]))
           [2 2] (let [[r1 r1-d] (keys c1) [r2 r2-d] (keys c2)
                       [can1 can2] (map cannonical-value-of-tree-rooted-at [free-tr1 free-tr2] [r1 r2])]
                   (or (= can1 can2)
-                      (let [can1-d (cannonical-value-of-tree-rooted-at free-tr1 r1-d)]
-                        (= can1-d can2)))))))
+                      (= (cannonical-value-of-tree-rooted-at free-tr1 r1-d) can2))) false)))
                       
-#_(let [pruf-code (random-tree 10)
-        g (prufer-code-to-graph-rep pruf-code)]
-    (map #(let [g1 (prufer-code-to-graph-rep %1)] (tree-isomorphic? g g1))
-         (permutations-repeated (frequencies pruf-code))))
+#_(def d (let [pruf-code (random-tree 10)
+               g (prufer-code-to-graph-rep pruf-code)
+               freq-pruf-code (frequencies pruf-code)
+               perms (permutations-repeated freq-pruf-code)
+               graphs (map prufer-code-to-graph-rep perms)]
+           (cannonical-value-of-tree-rooted-at g 3)
+           #_(map #(tree-isomorphic? g %) graphs)))
            
 (def mutation-probability 0.2)
 
