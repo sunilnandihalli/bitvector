@@ -1,7 +1,8 @@
 (ns bitvector.core
   (:require [clojure.java.io :as io]
             [clojure.contrib.combinatorics :as comb]
-            [clojure.data.finger-tree :as ft])
+            [clojure.data.finger-tree :as ft]
+            [clojure.contrib.generic.math-functions :as mfn])
   (:import [java.io BufferedReader BufferedWriter FileReader])
   (:use iterate bitvector.debug))
 
@@ -35,9 +36,45 @@
           [1 1] (apply = (map (fn [tr c] (cannonical-value-of-tree-rooted-at tr (ffirst c))) [free-tr1 free-tr2] [c1 c2]))
           [2 2] (let [[r1 r1-d] (keys c1) [r2 r2-d] (keys c2)
                       [can1 can2] (map cannonical-value-of-tree-rooted-at [free-tr1 free-tr2] [r1 r2])]
-                  (or (= can1 can2)
-                      (= (cannonical-value-of-tree-rooted-at free-tr1 r1-d) can2))) false)))
-                      
+                  (or (= can1 can2) (= (cannonical-value-of-tree-rooted-at free-tr1 r1-d) can2))) false)))
+
+(defn log-fact-d [n] (if (= n 0) 0 (+ (mfn/log n) (log-fact-d (dec n)))))
+(def log-fact-d (memoize log-fact-d))
+(defn log-number-of-ways-to-build-tree [cannonical-tree-rep]
+  (let [n (count cannonical-tree-rep)]
+    (if (= n 0) 0 (apply + (log-fact-d n) (map log-number-of-ways-to-build-tree cannonical-tree-rep)))))
+(def log-number-of-ways-to-build-tree (memoize log-number-of-ways-to-build-tree))
+(let [alpha 2.955765 beta 0.5349485 ln-alpha (mfn/log alpha) ln-beta (mfn/log beta)
+      coefficients [0.5349496061 0.441699018 0.485387731 2.379745574]]
+  (defn log-number-of-non-isomorphic-trees [n]
+    (+ (* ln-alpha n) (* -2.5 (mfn/log n)) (mfn/log (apply + (map * coefficients (iterate #(/ % n) 1)))))))
+(def log-number-of-non-isomorphic-trees (memoize log-number-of-non-isomorphic-trees))
+
+(defn map-of-cannonical-values-with-all-nodes-as-roots [free-tree]
+  (let [can-vals-with-sub-tree-memory (fn [[mem can-vals] id]
+                                        (let [sub-tree-can-val (fn sub-tree-can-val [[p-id c-id :as k] cur-mem]
+                                                                 (if-let [[_ v] (find cur-mem k)] [cur-mem v]
+                                                                         (let [c-c-ids (disj (free-tree c-id) p-id)
+                                                                               [new-cur-mem vs] (reduce (fn [[nc-mem vs] c-c-id]
+                                                                                                          (let [[nnc-mem v] (sub-tree-can-val [c-id c-c-id] nc-mem)]
+                                                                                                            [nnc-mem (conj vs v)])) [cur-mem []] c-c-ids)
+                                                                               cannonical (frequencies vs)]
+                                                                           [(assoc new-cur-mem [p-id c-id] cannonical) cannonical])))]
+                                          (if (contains? can-vals id) [mem can-vals]
+                                              (let [[new-mem v] (reduce (fn [[nmem vs] cid]
+                                                                          (let [[nnmem v] (sub-tree-can-val [id cid] nmem)]
+                                                                            [nnmem (conj vs v)])) [mem []] (disj (free-tree id) id))]
+                                                [new-mem (assoc can-vals id (frequencies v))]))))
+        [_ can-vals] (reduce can-vals-with-sub-tree-memory [{} {}] (keys free-tree))]
+    can-vals))
+        
+#_(def d (time (let [pruf-code (random-tree 10000)
+                     g (prufer-code-to-graph-rep pruf-code)
+                     can-vals (map-of-cannonical-values-with-all-nodes-as-roots g)]
+                 [pruf-code g can-vals])))
+    
+
+
 #_(def d (let [pruf-code (random-tree 10)
                g (prufer-code-to-graph-rep pruf-code)
                freq-pruf-code (frequencies pruf-code)
