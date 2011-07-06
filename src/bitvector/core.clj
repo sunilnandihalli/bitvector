@@ -26,7 +26,7 @@
       (reduce (fn [tr cid] (update-in tr [cid] #(disj % root))) x children)
       (map vector (repeat x) children))))
 
-(defn cannonical-value-of-tree-rooted-at [tree root]
+(defn cannonical-value-of-tree-rooted-at [[mem tree root]]
   (if-let [child-trees (children-trees tree root)]
     (set (map #(apply cannonical-value-of-tree-rooted-at %) child-trees)) #{}))
 
@@ -44,8 +44,8 @@
   "doubtfull .. check this later"
   (let [frqs (vals cannonical-tree-rep)
         n (apply + frqs)]
-    (if (= n 0) 0 (apply + (log-fact n) (- (apply + (map log-fact frqs)))
-                         (map log-number-of-ways-to-build-tree cannonical-tree-rep)))))
+    (if (= n 0) 0 (apply + (log-fact n) #_(- (apply + (map log-fact frqs)))
+                         (map (fn [[key frq]] (* frq (log-number-of-ways-to-build-tree key))) cannonical-tree-rep)))))
 (def log-number-of-ways-to-build-tree (memoize log-number-of-ways-to-build-tree))
 (let [alpha 2.955765 beta 0.5349485 ln-alpha (mfn/log alpha) ln-beta (mfn/log beta)
       coefficients [0.5349496061 0.441699018 0.485387731 2.379745574]]
@@ -53,31 +53,52 @@
     (+ (* ln-alpha n) (* -2.5 (mfn/log n)) (mfn/log (apply + (map * coefficients (iterate #(/ % n) 1)))))))
 (def log-number-of-non-isomorphic-trees (memoize log-number-of-non-isomorphic-trees))
 
-(defn map-of-cannonical-values-with-all-nodes-as-roots [free-tree]
+
+(defn sub-tree-cannonical-value [free-tree]
+  (let [inc-or-init #(or (and % (inc %)) 1)]
+    (fn sub-tree-can-val [[p-id c-id :as k] cur-mem]
+      (if-let [[_ v] (find cur-mem k)] [cur-mem v]
+              (let [c-c-ids (disj (free-tree c-id) p-id)
+                    [new-cur-mem cannonical] (reduce (fn [[nc-mem vs] c-c-id]
+                                                       (let [[nnc-mem v] (sub-tree-can-val [c-id c-c-id] nc-mem)]
+                                                         [nnc-mem (update-in vs [v] inc-or-init)]))
+                                                     [cur-mem {}] c-c-ids)]
+                [(assoc new-cur-mem [p-id c-id] cannonical) cannonical])))))
+
+(defn cannonical-values-with-sub-tree-memory [free-tree]
   (let [inc-or-init #(or (and % (inc %)) 1)
-        can-vals-with-sub-tree-memory (fn can-vals-with-sub-tree-memory [[mem can-vals] id]
-                                        (let [sub-tree-can-val (fn sub-tree-can-val [[p-id c-id :as k] cur-mem]
-                                                                 (if-let [[_ v] (find cur-mem k)] [cur-mem v]
-                                                                         (let [c-c-ids (disj (free-tree c-id) p-id)
-                                                                               [new-cur-mem cannonical] (reduce (fn [[nc-mem vs] c-c-id]
-                                                                                                          (let [[nnc-mem v] (sub-tree-can-val [c-id c-c-id] nc-mem)]
-                                                                                                            [nnc-mem (update-in vs [v] inc-or-init)]))
-                                                                                                        [cur-mem {}] c-c-ids)]
-                                                                           [(assoc new-cur-mem [p-id c-id] cannonical) cannonical])))]
-                                          (if (contains? can-vals id) [mem can-vals]
-                                              (let [[new-mem v] (reduce (fn [[nmem vs] cid]
-                                                                          (let [[nnmem v] (sub-tree-can-val [id cid] nmem)]
-                                                                            [nnmem (update-in vs [v] inc-or-init)])) [mem {}] (disj (free-tree id) id))]
-                                                [new-mem (assoc can-vals id v)]))))
-        [_ can-vals] (reduce can-vals-with-sub-tree-memory [{} {}] (keys free-tree))]
+        sub-tree-can-val (sub-tree-cannonical-value free-tree)]
+    (fn [[mem can-vals] id]
+      (if (contains? can-vals id) [mem can-vals]
+          (let [[new-mem v] (reduce (fn [[nmem vs] cid]
+                                      (let [[nnmem v] (sub-tree-can-val [id cid] nmem)]
+                                        [nnmem (update-in vs [v] inc-or-init)])) [mem {}] (free-tree id))]
+            [new-mem (assoc can-vals id v)])))))
+
+(defn map-of-cannonical-values-with-all-nodes-as-roots [free-tree]
+  (let [[_ can-vals] (reduce (cannonical-values-with-sub-tree-memory free-tree) [{} {}] (keys free-tree))]
     can-vals))
+
+(defn random-higly-probable-tree [n]
+  (reduce (fn [mp i] (assoc mp [i] (rand-int (count mp)))) {0 -1} (range 1 n)))
+
+(defn best-roots [free-tree]
+  (let [can-vals (map-of-cannonical-values-with-all-nodes-as-roots free-tree)
+        num-ways (into {} (map (fn [[root-id cannonical]] [root-id (log-number-of-ways-to-build-tree cannonical)]) can-vals))
+        ways-root-ids-group (reduce (fn [mp [id q]] (update-in mp [q] #(conj % id))) num-ways)
+        [q max-ways-root-ids :as ret] (apply max-key first num-ways)] ret))
+    
         
 #_(def d (time (let [pruf-code (random-tree 5)
                      g (prufer-code-to-graph-rep pruf-code)
-                     can-vals (map-of-cannonical-values-with-all-nodes-as-roots g)]
-                 [pruf-code g can-vals])))
-    
-
+                     can-vals (map-of-cannonical-values-with-all-nodes-as-roots g)
+                     num-ways (map (fn [[root-id cannonical]] [root-id (log-number-of-ways-to-build-tree cannonical)]) can-vals)
+                     c (center-of-tree g)
+                     ways-root-ids-group (into {}
+                                               (map (fn [[k vs]] [k (map first vs)])
+                                                    (group-by second num-ways)))
+                     max-ways-root-id (apply max-key first ways-root-ids-group)]
+                 [max-ways-root-id ways-root-ids-group g c can-vals])))
 
 #_(def d (let [pruf-code (random-tree 10)
                g (prufer-code-to-graph-rep pruf-code)
