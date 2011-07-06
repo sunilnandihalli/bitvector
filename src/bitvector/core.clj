@@ -40,6 +40,7 @@
 
 (defn log-fact [n] (if (= n 0) 0 (+ (mfn/log n) (log-fact (dec n)))))
 (def log-fact (memoize log-fact))
+
 (defn log-number-of-ways-to-build-tree [cannonical-tree-rep]
   "doubtfull .. check this later"
   (let [frqs (vals cannonical-tree-rep)
