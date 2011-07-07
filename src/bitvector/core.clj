@@ -80,8 +80,34 @@
   (let [[_ can-vals] (reduce (cannonical-values-with-sub-tree-memory free-tree) [{} {}] (keys free-tree))]
     can-vals))
 
-(defn random-higly-probable-tree [n]
-  (reduce (fn [mp i] (assoc mp [i] (rand-int (count mp)))) {0 -1} (range 1 n)))
+(defn random-highly-probable-tree [n]
+  (reduce (fn [mp i] (-> mp (update-in [(rand-int i)] #(conj % i)) (assoc i nil))) {0 nil} (range 1 n)))
+
+(defn number-of-nodes
+  ([mp root-id] (apply + 1 (map (partial number-of-children mp) (mp root-id))))
+  ([mp] (number-of-children mp 0)))         
+
+#_(number-of-nodes (random-highly-probable-tree 10000))
+#_(log-probability-and-number-of-children-of-tree (random-highly-probable-tree 10000))
+
+(defn log-probability-and-number-of-children-of-tree
+  ([mp root-id] (if-let [child-tree-root-ids (mp root-id)]
+                  (let [log-prob-and-n-child-pairs (map (partial log-probability-and-number-of-children-of-tree mp) child-tree-root-ids)
+                        children-tree-n-nodes (map second log-prob-and-n-child-pairs)
+                        log-probs (map first log-prob-and-n-child-pairs)
+                        total-children (apply + children-tree-n-nodes)
+                        total-number-of-nodes-in-current-tree (inc total-children)
+                        log-probability-of-current-tree (apply + (log-fact total-children) (- (apply + (map log-fact children-tree-n-nodes))) log-probs)]
+                    [log-probability-of-current-tree total-number-of-nodes-in-current-tree]) [0 1]))
+  ([mp] (log-probability-and-number-of-children-of-tree mp 0)))
+
+(defn log-probability-of-current-permutation-of-bitvectors-for-current-tree [mp bit-vectors]
+
+(defn log-normal-distribution-functioin [n p]
+  (let [mu (* n p) var (* mu (- 1 p))
+        log-k (* (- 0.5) (apply + (mfn/log 2) (mfn/log 3.141592654) (mfn/log var)))
+        var-sqr (* var var)]
+    (fn [x] (let [x-mu (- x mu)] (- log-k (/ (* x-mu x-mu) var-sqr))))))
 
 (defn best-roots [free-tree]
   (let [can-vals (map-of-cannonical-values-with-all-nodes-as-roots free-tree)
@@ -197,7 +223,7 @@
 (defn read-bit-vectors [fname]
   (let [d (with-open [rdr (clojure.java.io/reader fname)]
             (->> (line-seq rdr) (map #(boolean-array (map {\0 false \1 true} %))) into-array))
-        n (count d) dist-memory (into-array (map #(short-array % (short -1)) (range n)))]
+        n (count d) dist-memory {}]
     {:distance-memory dist-memory :bit-vectors d :count n}))
 
 (defn generate-random-bit-vector-set [n]
@@ -217,15 +243,12 @@
   (loop [[fa & ra] a [fb & rb] b d 0]
     (if (not (nil? fa)) (recur ra rb (if (not= fa fb) (inc d) d)) d)))
 
-(defn distance [{memory :distance-memory bit-vectors :bit-vectors} [i j]]
+(defn log-bit-vector-distance-probability [{memory :distance-memory bit-vectors :bit-vectors} [i j]]
   (let [get-dist (fn [i j] (let [d (aget memory i j)]
                              (if (= d -1)
                                (let [nd (bit-dist (aget bit-vectors i) (aget bit-vectors j))]
                                  (aset memory i j (short nd)) nd) d)))]                   
     (cond (= i j) 0 (> i j) (get-dist i j) :else (get-dist j i))))
-
-(defn most-probable-root-node-given-a-tree [prufer-code])
-  
 
 (defn display-bit-vectors [{:keys [bit-vectors]}]
   (dorun (map-indexed #(println (str %1 " : " (apply str (map {true 1 false 0} %2)))) bit-vectors)))
