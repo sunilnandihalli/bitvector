@@ -53,35 +53,35 @@
 (defn read-bit-vectors [fname]
   (let [d (with-open [rdr (clojure.java.io/reader fname)]
             (->> (line-seq rdr) (map #(boolean-array (map {\0 false \1 true} %))) into-array))
-        n (count d) dist-memory {}]
+        n (count d) dist-memory (atom {}) log-pdf (log-normal-distribution-functioin n mutation-probability)]
     {:distance-memory dist-memory :bit-vectors d :count n}))
+
+(defn bit-dist [a b]
+  (loop [[fa & ra] a [fb & rb] b d 0]
+    (if (not (nil? fa)) (recur ra rb (if (not= fa fb) (inc d) d)) d)))
+
+(defn log-bit-vector-distance-probability [{memory :distance-memory bit-vectors :bit-vectors} [i j]]
+  (let [get-dist (fn [i j] (if-let [[_ v] (find @memory [i j])] v
+                             (let [v (bit-dist (aget bit-vectors i) (aget bit-vectors j))]
+                                 (swap! memory #(assoc % [i j] v)) v)))]                   
+    (cond (= i j) 0 (> i j) (get-dist i j) :else (get-dist j i))))
+
+(defn display-bit-vectors [{:keys [bit-vectors]}]
+  (dorun (map-indexed #(println (str %1 " : " (apply str (map {true 1 false 0} %2)))) bit-vectors)))
 
 (defn generate-random-bit-vector-set [n]
   (let [d (->> (fn [] (boolean-array (repeatedly n #({0 false 1 true} (rand-int 2))))) (repeatedly n)  into-array)
-        dist-memory (into-array (map #(short-array % (short -1)) (range n)))]
+        dist-memory {}]
     {:distance-memory dist-memory :bit-vectors d :count n}))
 
 (defn generate-input-problem [n]
   (let [clone (fn [parent mut-prob] (boolean-array (map #(if (< (rand) mut-prob) (not %) %) parent)))
         bit-vectors (into-array (reduce (fn [population _] (conj population (clone (rand-nth population) mutation-probability)))
                                         [(boolean-array (repeatedly n #({0 false 1 true} (rand-int 2))))] (range (dec n))))
-        dist-memory (into-array (map #(short-array % (short -1)) (range n)))]
+        dist-memory {}]
     {:distance-memory dist-memory :bit-vectors bit-vectors :count n}))
 
-(defn bit-dist [a b]
-  {:pre [(do (dorun (map #(println (apply str (map {true 1 false 0} %))) [a b]))  true)]} 
-  (loop [[fa & ra] a [fb & rb] b d 0]
-    (if (not (nil? fa)) (recur ra rb (if (not= fa fb) (inc d) d)) d)))
 
-(defn log-bit-vector-distance-probability [{memory :distance-memory bit-vectors :bit-vectors} [i j]]
-  (let [get-dist (fn [i j] (let [d (aget memory i j)]
-                             (if (= d -1)
-                               (let [nd (bit-dist (aget bit-vectors i) (aget bit-vectors j))]
-                                 (aset memory i j (short nd)) nd) d)))]                   
-    (cond (= i j) 0 (> i j) (get-dist i j) :else (get-dist j i))))
-
-(defn display-bit-vectors [{:keys [bit-vectors]}]
-  (dorun (map-indexed #(println (str %1 " : " (apply str (map {true 1 false 0} %2)))) bit-vectors)))
 #_(def d (read-bit-vectors "/home/github/bitvector/data/bitvectors-genes.data.small"))
 #_(def d (generate-random-bit-vector-set 1000))                
 #_(def d (generate-input-problem 100))
