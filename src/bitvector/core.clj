@@ -51,7 +51,7 @@
     
 (defn read-bit-vectors [fname]
   (let [d (with-open [rdr (clojure.java.io/reader fname)]
-            (->> (line-seq rdr) (map #(boolean-array (map {\0 false \1 true} %))) into-array))
+            (->> (line-seq rdr) (map-indexed #(vector %1 (boolean-array (map {\0 false \1 true} %2)))) (into {})))
         n (count d) dist-memory (atom (transient {})) log-pdf (log-normal-distribution-functioin n mutation-probability)]
     {:distance-memory dist-memory :bit-vectors d :count n}))
 
@@ -68,7 +68,6 @@
 (defn calc-all-distance-probabilities [{memory :distance-memory bit-vectors :bit-vectors n :count :as w}]
   (dorun (map (partial log-bit-vector-distance-probability w)
               (for [i (range n) j (range n) :when (< i j)] [i j]))))
-
 
 (defn display-bit-vectors [{:keys [bit-vectors]}]
   (dorun (map-indexed #(println (str %1 " : " (apply str (map {true 1 false 0} %2)))) bit-vectors)))
