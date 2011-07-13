@@ -6,7 +6,6 @@
   (:import [java.io BufferedReader BufferedWriter FileReader])
   (:use iterate bitvector.debug))
 
-
 (defn log-fact [n] (if (= n 0) 0 (+ (mfn/log n) (log-fact (dec n)))))
 (def log-fact (memoize log-fact))
 (defn log-number-of-ways-to-build-tree [cannonical-tree-rep]
@@ -21,10 +20,8 @@
   (defn log-number-of-non-isomorphic-trees [n]
     (+ (* ln-alpha n) (* -2.5 (mfn/log n)) (mfn/log (apply + (map * coefficients (iterate #(/ % n) 1)))))))
 (def log-number-of-non-isomorphic-trees (memoize log-number-of-non-isomorphic-trees))
-
 (defn random-highly-probable-tree [n]
   (reduce (fn [mp i] (-> mp (update-in [(rand-int i)] #(conj % i)) (assoc i nil))) {0 nil} (range 1 n)))
-
 (defn number-of-nodes
   ([mp root-id] (apply + 1 (map (partial number-of-nodes mp) (mp root-id))))
   ([mp] (number-of-nodes mp 0)))         
@@ -44,16 +41,18 @@
 
 (defn log-normal-distribution-functioin [n p]
   (let [mu (* n p) var (* mu (- 1 p))
-        log-k (* (- 0.5) (apply + (mfn/log 2) (mfn/log 3.141592654) (mfn/log var)))
+        log-k (* (- 0.5) (+ (mfn/log 2) (mfn/log 3.141592654) (mfn/log var)))
         var-sqr (* var var)]
     (fn [x] (let [x-mu (- x mu)] (- log-k (/ (* x-mu x-mu) var-sqr))))))
            
 (def mutation-probability 0.2)
+(def log-p (mfn/log mutation-probability))
+(def log-1-p (mfn/log (- 1 mutation-probability)))
     
 (defn read-bit-vectors [fname]
   (let [d (with-open [rdr (clojure.java.io/reader fname)]
             (->> (line-seq rdr) (map #(boolean-array (map {\0 false \1 true} %))) into-array))
-        n (count d) dist-memory (atom {}) log-pdf (log-normal-distribution-functioin n mutation-probability)]
+        n (count d) dist-memory (atom (transient {})) log-pdf (log-normal-distribution-functioin n mutation-probability)]
     {:distance-memory dist-memory :bit-vectors d :count n}))
 
 (defn bit-dist [a b]
@@ -63,8 +62,13 @@
 (defn log-bit-vector-distance-probability [{memory :distance-memory bit-vectors :bit-vectors} [i j]]
   (let [get-dist (fn [i j] (if-let [[_ v] (find @memory [i j])] v
                              (let [v (bit-dist (aget bit-vectors i) (aget bit-vectors j))]
-                                 (swap! memory #(assoc % [i j] v)) v)))]                   
+                                 (swap! memory #(assoc! % [i j] v)) v)))]                   
     (cond (= i j) 0 (> i j) (get-dist i j) :else (get-dist j i))))
+
+(defn calc-all-distance-probabilities [{memory :distance-memory bit-vectors :bit-vectors n :count :as w}]
+  (dorun (map (partial log-bit-vector-distance-probability w)
+              (for [i (range n) j (range n) :when (< i j)] [i j]))))
+
 
 (defn display-bit-vectors [{:keys [bit-vectors]}]
   (dorun (map-indexed #(println (str %1 " : " (apply str (map {true 1 false 0} %2)))) bit-vectors)))
@@ -81,8 +85,34 @@
         dist-memory {}]
     {:distance-memory dist-memory :bit-vectors bit-vectors :count n}))
 
+(defn average [& vs] (let [n (count vs)] (if (= n 0) 0 (/ (apply + vs) n))))
 
+(defn log-sum [& logs]
+  (let [m (apply average logs)]
+    (thrush-with-sym [x] (map #(- % m) logs) (map mfn/exp x) (apply + x) (mfn/log x) (+ m x))))
+(defn log-mult [& logs] (apply + logs))
+(defn log-div [& logs] (apply - logs))
+(defn log-pow [base power] (* power base))
+(defn log-combinations [n r] (log-div (log-fact n) (log-fact r) (log-fact (- n r))))
+(defn log-permutations [n r] (log-div (log-fact n) (log-fact r)))
+(defn log-probability [n bit-dist n-seperation-links]
+  (let [log-modified-p (apply log-sum (map
+                                   (fn [i] (log-mult (log-combinations n-seperation-links i)
+                                                     (log-pow log-p i)
+                                                     (log-pow log-1-p (- n-seperation-links i))))
+                                   (filter even? (range (inc n-seperation-links)))))
+        log-1-modified-p (mfn/log (- 1 (mfn/exp log-modified-p)))]
+    (log-mult (log-pow log-modified-p bit-dist) (log-pow log-1-modified-p (- n bit-dist)))))
+
+#_(map #(log-probability 100 90 %) (range 1 100 2))
+#_(let [a (range 1 10)
+        logs-a (map mfn/log a)]
+    (mfn/exp (apply log-sum logs-a)))
+    
+#_(let [d (time (read-bit-vectors "/home/github/bitvector/data/bigdata"))
+        d1 (time (calc-all-distance-probabilities d))])
 #_(def d (read-bit-vectors "/home/github/bitvector/data/bitvectors-genes.data.small"))
+#_(def d (read-bit-vectors "/home/github/bitvector/data/bigdata"))
 #_(def d (generate-random-bit-vector-set 1000))                
 #_(def d (generate-input-problem 100))
 #_(display-bit-vectors d)
