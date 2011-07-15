@@ -58,12 +58,12 @@
   (loop [[fa & ra] a [fb & rb] b d 0]
     (if (not (nil? fa)) (recur ra rb (if (not= fa fb) (inc d) d)) d)))
 
-(defn clone [{:keys [node-map root-id]}]
-  (let [n (count node-map)
-        nodes-whose-parents-need-to-be-permuted (take 2 (distinct (repeatedly #(rand-int n))))
-        {p :parent-id children :children q :tree-quality n :number-of-nodes-in-tree-rooted-here bv :bit-vector :as  sub-tree} (node-map n1)]
-    (thrush-with-sym [child] parent
-      (update-in child [n1 :parent-id])))) 
+#_(defn clone [{:keys [node-map root-id]}]
+    (let [n (count node-map)
+          nodes-whose-parents-need-to-be-permuted (take 2 (distinct (repeatedly #(rand-int n))))
+          {p :parent-id children :children q :tree-quality n :number-of-nodes-in-tree-rooted-here bv :bit-vector :as  sub-tree} (node-map node-id)]
+      (thrush-with-sym [child] parent
+        (update-in child [n1 :parent-id])))) 
     
         
 
@@ -111,6 +111,21 @@
         log-1-modified-p (mfn/log (- 1 (mfn/exp log-modified-p)))]
     (log-mult (log-pow log-modified-p bit-dist) (log-pow log-1-modified-p (- n bit-dist)))))
 
+(defn hash-calculating-func [hash-length]
+  (let [ids (take hash-length (shuffle (range 10000)))]
+    (fn [bv] (reduce (fn [hash [hash-loc-id bv-pos-id]]
+                       (if (aget bv bv-pos-id)
+                           (bit-set hash hash-loc-id) hash)) 0 (map-indexed vector ids)))))
+
+(defn calc-hashes-and-hash-fns [{:keys [bit-vectors count] :as bv-stuff}]
+  (let [hash-length 20 number-of-hashes 20
+        hash-funcs (repeatedly number-of-hashes #(hash-calculating-func 20))
+        calc-hashes-fn (fn [hash-buckets [id bv]]
+                         (reduce (fn [cur-hash-buckets hash-func] (update-in cur-hash-buckets (hash-func bv) #(conj % id)))
+                                 hash-buckets hash-funcs))
+        bv-hash-buckets (reduce calc-hashes-fn {} bit-vectors)]
+    (assoc bv-stuff :bv-hash-buckets bv-hash-buckets)))
+
 #_(map #(log-probability 100 90 %) (range 1 100 2))
 #_(let [a (range 1 10)
         logs-a (map mfn/log a)]
@@ -123,10 +138,6 @@
 #_(def d (generate-random-bit-vector-set 1000))                
 #_(def d (generate-input-problem 100))
 #_(display-bit-vectors d)
-           
-    
-        
-        
-                   
-        
-  
+#_(let [vc (vec (repeatedly 10000 #(rand-int 10000)))
+        mp (into {} (map-indexed vector vc))]
+    (map #(time (dotimes [i 100000] (% (rand-int 10000)))) [vc mp]))
