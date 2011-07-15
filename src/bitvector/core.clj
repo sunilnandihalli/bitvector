@@ -6,6 +6,7 @@
   (:import [java.io BufferedReader BufferedWriter FileReader])
   (:use iterate bitvector.debug))
 
+(defrecord tree-node [bit-vector number-of-nodes-in-tree-rooted-here tree-quality parent-id children])
 (defn log-fact [n] (if (= n 0) 0 (+ (mfn/log n) (log-fact (dec n)))))
 (def log-fact (memoize log-fact))
 (defn log-number-of-ways-to-build-tree [cannonical-tree-rep]
@@ -37,8 +38,6 @@
                     [log-probability-of-current-tree total-number-of-nodes-in-current-tree]) [0 1]))
   ([mp] (log-probability-and-number-of-children-of-tree mp 0)))
 
-(defn log-probability-of-current-permutation-of-bitvectors-for-current-tree [mp bit-vectors])
-
 (defn log-normal-distribution-functioin [n p]
   (let [mu (* n p) var (* mu (- 1 p))
         log-k (* (- 0.5) (+ (mfn/log 2) (mfn/log 3.141592654) (mfn/log var)))
@@ -52,12 +51,21 @@
 (defn read-bit-vectors [fname]
   (let [d (with-open [rdr (clojure.java.io/reader fname)]
             (->> (line-seq rdr) (map-indexed #(vector %1 (boolean-array (map {\0 false \1 true} %2)))) (into {})))
-        n (count d) dist-memory (atom (transient {})) log-pdf (log-normal-distribution-functioin n mutation-probability)]
+        n (count d) dist-memory (atom (transient {}))]
     {:distance-memory dist-memory :bit-vectors d :count n}))
 
 (defn bit-dist [a b]
   (loop [[fa & ra] a [fb & rb] b d 0]
     (if (not (nil? fa)) (recur ra rb (if (not= fa fb) (inc d) d)) d)))
+
+(defn clone [{:keys [node-map root-id]}]
+  (let [n (count node-map)
+        nodes-whose-parents-need-to-be-permuted (take 2 (distinct (repeatedly #(rand-int n))))
+        {p :parent-id children :children q :tree-quality n :number-of-nodes-in-tree-rooted-here bv :bit-vector :as  sub-tree} (node-map n1)]
+    (thrush-with-sym [child] parent
+      (update-in child [n1 :parent-id])))) 
+    
+        
 
 (defn log-bit-vector-distance-probability [{memory :distance-memory bit-vectors :bit-vectors} [i j]]
   (let [get-dist (fn [i j] (if-let [[_ v] (find @memory [i j])] v

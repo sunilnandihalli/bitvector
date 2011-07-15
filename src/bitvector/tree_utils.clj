@@ -1,3 +1,4 @@
+
 (defn center-of-tree [tree]
   {:pre [#_(do (println tree) true)]}
   (let [leaves (keep #(if (= 1 (count (second %))) (update-in % [1] seq)) tree)
