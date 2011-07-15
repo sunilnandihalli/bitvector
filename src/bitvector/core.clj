@@ -47,25 +47,30 @@
 (def mutation-probability 0.2)
 (def log-p (mfn/log mutation-probability))
 (def log-1-p (mfn/log (- 1 mutation-probability)))
+(defn hash-calculating-func [hash-length dimension-d]
+  (let [ids (take hash-length (shuffle (range dimension-d)))]
+    (fn [bv] (reduce (fn [hash [hash-loc-id bv-pos-id]]
+                       (if (aget bv bv-pos-id)
+                           (bit-set hash hash-loc-id) hash)) 0 (map-indexed vector ids)))))
+
+(defn calc-hashes-and-hash-fns [{:keys [bit-vectors count] :as bv-stuff}]
+  (let [hash-length 16 number-of-hashes 16
+        hash-funcs (repeatedly number-of-hashes #(hash-calculating-func hash-length count))
+        calc-hashes-fn (fn [hash-buckets [id bv]]
+                         (reduce (fn [cur-hash-buckets [hash-func-id hash-func]] (update-in cur-hash-buckets [hash-func-id (hash-func bv)] #(conj % id)))
+                                 hash-buckets (map-indexed vector hash-funcs)))
+        bv-hash-buckets (reduce calc-hashes-fn {} bit-vectors)]
+    (assoc bv-stuff :bv-hash-buckets bv-hash-buckets)))
     
 (defn read-bit-vectors [fname]
-  (let [d (with-open [rdr (clojure.java.io/reader fname)]
-            (->> (line-seq rdr) (map-indexed #(vector %1 (boolean-array (map {\0 false \1 true} %2)))) (into {})))
+  (let [d (time (with-open [rdr (clojure.java.io/reader fname)]
+                  (->> (line-seq rdr) (map-indexed #(vector %1 (boolean-array (map {\0 false \1 true} %2)))) (into {}))))
         n (count d) dist-memory (atom (transient {}))]
-    {:distance-memory dist-memory :bit-vectors d :count n}))
+    (time (calc-hashes-and-hash-fns {:distance-memory dist-memory :bit-vectors d :count n}))))
 
 (defn bit-dist [a b]
   (loop [[fa & ra] a [fb & rb] b d 0]
     (if (not (nil? fa)) (recur ra rb (if (not= fa fb) (inc d) d)) d)))
-
-#_(defn clone [{:keys [node-map root-id]}]
-    (let [n (count node-map)
-          nodes-whose-parents-need-to-be-permuted (take 2 (distinct (repeatedly #(rand-int n))))
-          {p :parent-id children :children q :tree-quality n :number-of-nodes-in-tree-rooted-here bv :bit-vector :as  sub-tree} (node-map node-id)]
-      (thrush-with-sym [child] parent
-        (update-in child [n1 :parent-id])))) 
-    
-        
 
 (defn log-bit-vector-distance-probability [{memory :distance-memory bit-vectors :bit-vectors} [i j]]
   (let [get-dist (fn [i j] (if-let [[_ v] (find @memory [i j])] v
@@ -111,26 +116,11 @@
         log-1-modified-p (mfn/log (- 1 (mfn/exp log-modified-p)))]
     (log-mult (log-pow log-modified-p bit-dist) (log-pow log-1-modified-p (- n bit-dist)))))
 
-(defn hash-calculating-func [hash-length]
-  (let [ids (take hash-length (shuffle (range 10000)))]
-    (fn [bv] (reduce (fn [hash [hash-loc-id bv-pos-id]]
-                       (if (aget bv bv-pos-id)
-                           (bit-set hash hash-loc-id) hash)) 0 (map-indexed vector ids)))))
-
-(defn calc-hashes-and-hash-fns [{:keys [bit-vectors count] :as bv-stuff}]
-  (let [hash-length 20 number-of-hashes 20
-        hash-funcs (repeatedly number-of-hashes #(hash-calculating-func 20))
-        calc-hashes-fn (fn [hash-buckets [id bv]]
-                         (reduce (fn [cur-hash-buckets hash-func] (update-in cur-hash-buckets (hash-func bv) #(conj % id)))
-                                 hash-buckets hash-funcs))
-        bv-hash-buckets (reduce calc-hashes-fn {} bit-vectors)]
-    (assoc bv-stuff :bv-hash-buckets bv-hash-buckets)))
-
 #_(map #(log-probability 100 90 %) (range 1 100 2))
 #_(let [a (range 1 10)
         logs-a (map mfn/log a)]
     (mfn/exp (apply log-sum logs-a)))
-    
+#_(def big-data (read-bit-vectors "/home/github/bitvector/data/bigdata"))
 #_(let [d (time (read-bit-vectors "/home/github/bitvector/data/bigdata"))
         d1 (time (calc-all-distance-probabilities d))])
 #_(def d (read-bit-vectors "/home/github/bitvector/data/bitvectors-genes.data.small"))
