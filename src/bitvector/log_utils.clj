@@ -9,7 +9,9 @@
 
 (defn log-sum [& logs]
   (let [m (apply average logs)]
-    (thrush-with-sym [x] (map #(- % m) logs) (map mfn/exp x) (apply + x) (mfn/log x) (+ m x))))
+    (thrush-with-sym [x] (map #(- % m) logs) (map mfn/exp x)
+      (apply + x) (mfn/log x) (+ m x))))
+
 (defn log-mult [& logs] (apply + logs))
 (defn log-div [& logs] (apply - logs))
 (defn log-pow [base power] (* power base))

@@ -80,6 +80,34 @@
                     [log-probability-of-current-tree total-number-of-nodes-in-current-tree]) [0 1]))
   ([mp] (log-probability-and-number-of-children-of-tree mp 0)))
 
+(defn generate-random-genealogy [n]
+  (let [root-id (rand-int n)]
+    (loop [genealogy {root-id -1} available-parents [root-id]
+           [f-av-n & rest-of-av-nodes] (seq (disj (set (range n)) root-id))]
+      (if-not f-av-n genealogy
+              (recur (assoc genealogy f-av-n (rand-nth available-parents))
+                     (conj available-parents f-av-n) rest-of-av-nodes)))))
+#_(generate-random-genealogy 40)
+
+(defn genealogy-to-rooted-tree [genealogy]
+  (reduce (fn [[graph root-id] [child-id parent-id]]
+            (if (= parent-id -1) [graph child-id]
+                [(-> graph
+                     (update-in [child-id] #(if % (conj % parent-id) #{parent-id}))
+                     (update-in [parent-id] #(if % (conj % child-id) #{child-id}))) root-id]))
+          [{} -1] genealogy))
+
+(defn rooted-tree-to-genealogy [[graph root-id]]
+  (loop [genealogy {root-id -1} cur-graph graph [first-root & rest-of-roots] [root-id]]
+    (if-not first-root genealogy
+            (let [new-roots (cur-graph first-root)]
+              (recur (reduce #(assoc %1 %2 first-root) genealogy new-roots)
+                     (reduce (fn [gr n-root] (update-in gr [n-root] #(disj % first-root))) cur-graph new-roots)
+                     (into rest-of-roots new-roots))))))
+
+#_(let [tr (generate-random-genealogy 100)]
+    (println tr)
+    (= tr (-> tr genealogy-to-rooted-tree rooted-tree-to-genealogy)))        
 
 #_(def d (time (let [pruf-code (random-tree 5)
                      g (prufer-code-to-graph-rep pruf-code)
@@ -91,6 +119,9 @@
                                                     (group-by second num-ways)))
                      max-ways-root-id (apply max-key first ways-root-ids-group)]
                  [max-ways-root-id ways-root-ids-group g c can-vals])))
+#_(def d (let [pruf-code (random-tree 10)]
+           (prufer-code-to-graph-rep pruf-code)))
+               
 
 #_(def d (let [pruf-code (random-tree 10)
                g (prufer-code-to-graph-rep pruf-code)

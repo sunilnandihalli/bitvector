@@ -5,11 +5,12 @@
             [clojure.contrib.generic.math-functions :as mfn]
             [bitvector.tree-utils :as tr])
   (:import [java.io BufferedReader BufferedWriter FileReader])
-  (:use iterate bitvector.debug clojure.inspector))
+  (:use iterate bitvector.debug clojure.inspector bitvector.log-utils))
 
+(def mutation-probability 0.2)
 (def log-p (mfn/log mutation-probability))
 (def log-1-p (mfn/log (- 1 mutation-probability)))
-(def mutation-probability 0.2)
+
 
 (defrecord tree-node [bit-vector number-of-nodes-in-tree-rooted-here tree-quality parent-id children])
 (defn log-probability [n bit-dist n-seperation-links]
@@ -42,6 +43,7 @@
                             (calc-hashes-and-hash-fns x :approximation-factor 2))]
            (number-of-collisions-per-node small-data)))
 
+            
 (defn bit-dist [{memory :distance-memory bit-vectors :bit-vectors} [i j]]
   (let [bit-dist-help (fn [a b]
                         (loop [[fa & ra] a [fb & rb] b d 0]
