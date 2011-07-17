@@ -1,3 +1,6 @@
+(ns bitvector.tree-utils
+  (:require [clojure.contrib.generic.math-functions :as mfn])
+  (:use iterate bitvector.debug clojure.inspector bitvector.log-utils))
 
 (defn center-of-tree [tree]
   {:pre [#_(do (println tree) true)]}
@@ -45,15 +48,39 @@
 
 (defn map-of-cannonical-values-with-all-nodes-as-roots [free-tree]
   (let [[_ can-vals] (reduce (cannonical-values-with-sub-tree-memory free-tree) [{} {}] (keys free-tree))]
-    can-vals))
+    can-vals))    
 
-(defn best-roots [free-tree]
-  (let [can-vals (map-of-cannonical-values-with-all-nodes-as-roots free-tree)
-        num-ways (into {} (map (fn [[root-id cannonical]] [root-id (log-number-of-ways-to-build-tree cannonical)]) can-vals))
-        ways-root-ids-group (reduce (fn [mp [id q]] (update-in mp [q] #(conj % id))) num-ways)
-        [q max-ways-root-ids :as ret] (apply max-key first num-ways)] ret))
-    
-        
+(defn log-number-of-ways-to-build-tree [cannonical-tree-rep]
+  "doubtfull .. check this later"
+  (let [frqs (vals cannonical-tree-rep)
+        n (apply + frqs)]
+    (if (= n 0) 0 (apply + (log-fact n) #_(- (apply + (map log-fact frqs)))
+                         (map (fn [[key frq]] (* frq (log-number-of-ways-to-build-tree key))) cannonical-tree-rep)))))
+(def log-number-of-ways-to-build-tree (memoize log-number-of-ways-to-build-tree))
+(let [alpha 2.955765 beta 0.5349485 ln-alpha (mfn/log alpha) ln-beta (mfn/log beta)
+      coefficients [0.5349496061 0.441699018 0.485387731 2.379745574]]
+  (defn log-number-of-non-isomorphic-trees [n]
+    (+ (* ln-alpha n) (* -2.5 (mfn/log n)) (mfn/log (apply + (map * coefficients (iterate #(/ % n) 1)))))))
+(def log-number-of-non-isomorphic-trees (memoize log-number-of-non-isomorphic-trees))
+(defn random-highly-probable-tree [n]
+  (reduce (fn [mp i] (-> mp (update-in [(rand-int i)] #(conj % i)) (assoc i nil))) {0 nil} (range 1 n)))
+
+(defn number-of-nodes
+  ([mp root-id] (apply + 1 (map (partial number-of-nodes mp) (mp root-id))))
+  ([mp] (number-of-nodes mp 0)))         
+
+(defn log-probability-and-number-of-children-of-tree
+  ([mp root-id] (if-let [child-tree-root-ids (mp root-id)]
+                  (let [log-prob-and-n-child-pairs (map (partial log-probability-and-number-of-children-of-tree mp) child-tree-root-ids)
+                        children-tree-n-nodes (map second log-prob-and-n-child-pairs)
+                        log-probs (map first log-prob-and-n-child-pairs)
+                        total-children (apply + children-tree-n-nodes)
+                        total-number-of-nodes-in-current-tree (inc total-children)
+                        log-probability-of-current-tree (apply + (log-fact total-children) (- (apply + (map log-fact children-tree-n-nodes))) log-probs)]
+                    [log-probability-of-current-tree total-number-of-nodes-in-current-tree]) [0 1]))
+  ([mp] (log-probability-and-number-of-children-of-tree mp 0)))
+
+
 #_(def d (time (let [pruf-code (random-tree 5)
                      g (prufer-code-to-graph-rep pruf-code)
                      can-vals (map-of-cannonical-values-with-all-nodes-as-roots g)
@@ -109,6 +136,12 @@
                 new-leaf-nodes (into rest-of-leaf-nodes (let [l (find new-graph id2)] (if (= 1 (count (second l))) [l])))]
             (recur new-leaf-nodes new-prufer-code new-graph))))))
 
+(defn best-roots [free-tree]
+  (let [can-vals (map-of-cannonical-values-with-all-nodes-as-roots free-tree)
+        num-ways (into {} (map (fn [[root-id cannonical]] [root-id (log-number-of-ways-to-build-tree cannonical)]) can-vals))
+        ways-root-ids-group (reduce (fn [mp [id q]] (update-in mp [q] #(conj % id))) num-ways)
+        [q max-ways-root-ids :as ret] (apply max-key first num-ways)] ret))
+
 #_(repeatedly 1000 #(let [n (+ 2 (rand-int 1000))
                           g1 (random-tree n)
                           trf (random-node-map n)
@@ -140,7 +173,6 @@
     (println ['rand-tree rand-tree])
     (println ['rand-node-map rand-node-map])
     (check-isomorphism rand-tree rand-node-map))
-
 
 (defn permutations-repeated
   ([items n]
