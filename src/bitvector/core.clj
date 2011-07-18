@@ -37,12 +37,13 @@
         collision-frequencies (into (sorted-map) (frequencies (vals collisions-map)))]
     collision-frequencies))
 
+(defn generate-random-probable-solution [{:keys [bit-vectors bv-hash-buckets hash-funcs] cnt :count :as bv-stuff}]
+  (loop 
 #_(def d (number-of-collisions-per-node big-data))
 #_(def e (let [small-data (thrush-with-sym [x]
                             (read-bit-vectors "/home/github/bitvector/data/bitvectors-genes.data.small")
                             (calc-hashes-and-hash-fns x :approximation-factor 2))]
            (number-of-collisions-per-node small-data)))
-
             
 (defn bit-dist [{memory :distance-memory bit-vectors :bit-vectors} [i j]]
   (let [bit-dist-help (fn [a b]
