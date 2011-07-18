@@ -36,8 +36,18 @@
         collision-frequencies (into (sorted-map) (frequencies (vals collisions-map)))]
     collision-frequencies))
 
+(defn probable-nearest-bv-ids [{:keys [bv-hash-buckets hash-funcs bit-vectors] :as bv-stuff} id]
+  (thrush-with-sym [x] hash-funcs (mapcat (fn [[hf-id hf]] ((bv-hash-buckets hf-id) (hf (bit-vectors id)))) x)
+    (distinct x) (filter #(not= % id) x)))
+
+(defn probable-links-to [{:keys [bv-hash-buckets hash-funcs] :as bv-stuff} id]
+  (map vector (repeat id) (probable-nearest-bv-ids bv-stuff id)))
+
 (defn generate-random-probable-solution [{:keys [bit-vectors bv-hash-buckets hash-funcs] cnt :count :as bv-stuff}]
-  (loop []))
+  (let [root-id (rand-int cnt)]
+    (loop [parent-nodes #{} available-nodes (set (range cnt)) probable-link-pairs {} total-children-probability 0]
+      )))
+
 #_(def d (number-of-collisions-per-node big-data))
 #_(def e (let [small-data (thrush-with-sym [x]
                             (read-bit-vectors "/home/github/bitvector/data/bitvectors-genes.data.small")
@@ -55,9 +65,6 @@
 
 (defn-memoized log-probability-of-bv [r n]
   (log-mult (log-pow log-p r) (log-pow log-1-p (- n r))))
-
-(defn sorted-map-with-key-by [coll key-fn comp-fn]
-  (into))
 
 (defn closest-point [{:keys [bit-vectors bv-hash-buckets hash-funcs] cnt :count :as bv-stuff} query-bv-id
                      & {:keys [closest-point-among]}]

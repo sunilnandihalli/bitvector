@@ -13,6 +13,13 @@
 (defmacro defn-memoized [name & rest]
   `(do (defn ~name ~@rest) (def ~name (with-meta (memoize ~name) (meta ~name))))) 
 
+(defmacro defn-with-source [name & rest]
+  `(do (defn ~name ~@rest)
+       (def ~name (with-meta ~name
+                    (assoc (meta ~name) :source '~&form)))))
+
+(defmacro fnd [& rest]
+  `(with-meta (fn ~@rest) {:source '~&form}))
 
 (defmacro ->var [first & exprs]
   (if (seq exprs) `(let [~'var ~first] (->var ~@exprs)) first))
