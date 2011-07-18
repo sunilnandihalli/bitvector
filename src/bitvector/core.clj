@@ -11,7 +11,6 @@
 (def log-p (mfn/log mutation-probability))
 (def log-1-p (mfn/log (- 1 mutation-probability)))
 
-
 (defrecord tree-node [bit-vector number-of-nodes-in-tree-rooted-here tree-quality parent-id children])
 (defn log-probability [n bit-dist n-seperation-links]
   (let [log-modified-p (apply log-sum (map
@@ -38,7 +37,7 @@
     collision-frequencies))
 
 (defn generate-random-probable-solution [{:keys [bit-vectors bv-hash-buckets hash-funcs] cnt :count :as bv-stuff}]
-  (loop 
+  (loop []))
 #_(def d (number-of-collisions-per-node big-data))
 #_(def e (let [small-data (thrush-with-sym [x]
                             (read-bit-vectors "/home/github/bitvector/data/bitvectors-genes.data.small")
@@ -54,10 +53,11 @@
                                      (swap! memory #(assoc % [i j] v)) v)))]                   
     (cond (= i j) 0 (> i j) (get-dist i j) :else (get-dist j i))))
 
-(defn log-probability-of-bv [r n]
+(defn-memoized log-probability-of-bv [r n]
   (log-mult (log-pow log-p r) (log-pow log-1-p (- n r))))
 
-(def log-probability-of-bv (memoize log-probability-of-bv))
+(defn sorted-map-with-key-by [coll key-fn comp-fn]
+  (into))
 
 (defn closest-point [{:keys [bit-vectors bv-hash-buckets hash-funcs] cnt :count :as bv-stuff} query-bv-id
                      & {:keys [closest-point-among]}]

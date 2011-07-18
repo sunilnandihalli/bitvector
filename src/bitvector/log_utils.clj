@@ -3,8 +3,8 @@
   (:use iterate bitvector.debug clojure.inspector))
 
 
-(defn log-fact [n] (if (= n 0) 0 (+ (mfn/log n) (log-fact (dec n)))))
-(def log-fact (memoize log-fact))
+(defn-memoized log-fact [n] (if (= n 0) 0 (+ (mfn/log n) (log-fact (dec n)))))
+
 (defn average [& vs] (let [n (count vs)] (if (= n 0) 0 (/ (apply + vs) n))))
 
 (defn log-sum [& logs]

@@ -10,6 +10,10 @@
 #_(clojure.pprint/pprint
    (into-array (map (partial into-array Double/TYPE) [[1 2 3 4] [5 6]])))
 
+(defmacro defn-memoized [name & rest]
+  `(do (defn ~name ~@rest) (def ~name (with-meta (memoize ~name) (meta ~name))))) 
+
+
 (defmacro ->var [first & exprs]
   (if (seq exprs) `(let [~'var ~first] (->var ~@exprs)) first))
 

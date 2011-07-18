@@ -50,18 +50,18 @@
   (let [[_ can-vals] (reduce (cannonical-values-with-sub-tree-memory free-tree) [{} {}] (keys free-tree))]
     can-vals))    
 
-(defn log-number-of-ways-to-build-tree [cannonical-tree-rep]
+(defn-memoized log-number-of-ways-to-build-tree [cannonical-tree-rep]
   "doubtfull .. check this later"
   (let [frqs (vals cannonical-tree-rep)
         n (apply + frqs)]
     (if (= n 0) 0 (apply + (log-fact n) #_(- (apply + (map log-fact frqs)))
                          (map (fn [[key frq]] (* frq (log-number-of-ways-to-build-tree key))) cannonical-tree-rep)))))
-(def log-number-of-ways-to-build-tree (memoize log-number-of-ways-to-build-tree))
+
 (let [alpha 2.955765 beta 0.5349485 ln-alpha (mfn/log alpha) ln-beta (mfn/log beta)
       coefficients [0.5349496061 0.441699018 0.485387731 2.379745574]]
-  (defn log-number-of-non-isomorphic-trees [n]
+  (defn-memoized log-number-of-non-isomorphic-trees [n]
     (+ (* ln-alpha n) (* -2.5 (mfn/log n)) (mfn/log (apply + (map * coefficients (iterate #(/ % n) 1)))))))
-(def log-number-of-non-isomorphic-trees (memoize log-number-of-non-isomorphic-trees))
+
 (defn random-highly-probable-tree [n]
   (reduce (fn [mp i] (-> mp (update-in [(rand-int i)] #(conj % i)) (assoc i nil))) {0 nil} (range 1 n)))
 
