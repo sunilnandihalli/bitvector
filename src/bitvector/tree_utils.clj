@@ -50,7 +50,7 @@
   (let [[_ can-vals] (reduce (cannonical-values-with-sub-tree-memory free-tree) [{} {}] (keys free-tree))]
     can-vals))    
 
-(defn-memoized log-number-of-ways-to-build-tree [cannonical-tree-rep]
+(defn log-number-of-ways-to-build-tree [cannonical-tree-rep]
   "doubtfull .. check this later"
   (let [frqs (vals cannonical-tree-rep)
         n (apply + frqs)]
@@ -87,6 +87,7 @@
       (if-not f-av-n genealogy
               (recur (assoc genealogy f-av-n (rand-nth available-parents))
                      (conj available-parents f-av-n) rest-of-av-nodes)))))
+
 #_(generate-random-genealogy 40)
 
 (defn genealogy-to-rooted-tree [genealogy]

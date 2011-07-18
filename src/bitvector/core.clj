@@ -12,7 +12,11 @@
 (def log-1-p (mfn/log (- 1 mutation-probability)))
 
 (defrecord tree-node [bit-vector number-of-nodes-in-tree-rooted-here tree-quality parent-id children])
-(defn log-probability [n bit-dist n-seperation-links]
+(defn abs [x] (if (< x 0) (- x) x))
+(defn-memoized log-parent-child-probability [bit-cnt dist]
+  (log-mult (log-pow log-p dist) (log-pow log-1-p (- bit-cnt dist))))
+
+(defn log-hierarchy-seperation-probability [n bit-dist n-seperation-links]
   (let [log-modified-p (apply log-sum (map
                                    (fn [i] (log-mult (log-combinations n-seperation-links i)
                                                      (log-pow log-p i)
@@ -44,9 +48,37 @@
   (map vector (repeat id) (probable-nearest-bv-ids bv-stuff id)))
 
 (defn generate-random-probable-solution [{:keys [bit-vectors bv-hash-buckets hash-funcs] cnt :count :as bv-stuff}]
-  (let [root-id (rand-int cnt)]
-    (loop [parent-nodes #{} available-nodes (set (range cnt)) probable-link-pairs {} total-children-probability 0]
-      )))
+  (let [root-id (rand-int cnt)
+        len-comp (fn [x y] (< (bit-dist bv-stuff x) (bit-dist bv-stuff y)))
+        initial-probable-link-pairs (map (fn [x y] [[x y] (/ 1.0 (abs (log-parent-child-probability cnt (bit-dist bv-stuff [x y]))))])
+                                         (repeat root-id) (probable-nearest-bv-ids bv-stuff root-id))]
+    (loop [parent-nodes #{root-id} available-nodes (disj (set (range cnt)) root-id)
+           probable-link-pairs initial-probable-link-pairs cur-genealogy {root-id -1}]
+      (if (empty? available-nodes) cur-genealogy
+          (let [cumulative-probs (into (sorted-map) (reductions (fn [[sum _] [lnk p]] [(+ sum p) lnk]) 0 probable-link-pairs))
+                max-prob (ffirst (rseq cumulative-probs))
+                [parent-node new-node] (second (ffirst (subseq cumulative-probs > (rand max-prob))))
+                new-available-nodes (disj new-node available-nodes)
+                new-parent-nodes (conj new-node parent-nodes)
+                new-probable-links (concat (filter (fn [[[_ cid] _]] (not= cid new-node)) probable-link-pairs)
+                                           (map (fn [x y] [[x y] (/ 1.0 (bit-dist bv-stuff [x y]))])
+                                                (repeat new-node) (filter (comp not new-parent-nodes) (probable-nearest-bv-ids bv-stuff new-node))))
+                new-genealogy (assoc cur-genealogy new-node parent-node)]
+            (recur  new-parent-nodes new-available-nodes new-probable-links new-genealogy))))))
+
+(defn optimize-root-id [gr rt-id] [(tr/log-probability-and-number-of-children-of-tree graph-rep optimized-root-id) rt-id])
+
+(defn find-good-tree [bv-stuff & {:keys [n-iterations] :or [n-iterations 100]}]
+  (loop [i 0 cur-best-sol nil cur-quality nil]
+    (if (= i n-iterations) cur-best-sol
+        (let [rand-sol (generate-random-probable-solution bv-stuff)
+              [graph-rep root-id] (genealogy-to-rooted-tree rand-sol)
+              [new-sol-quality optimized-root-id] (optimize-root-id graph-rep root-id)
+              [new-best-sol new-quality] (if-not cur-best-sol [[graph-rep optimize-root-id] new-sol-quality]
+                                           (if (> new-sol-quality cur-quality) [[graph-rep optimize-root-id] new-sol-quality]
+                                               [cur-best-sol cur-quality]))]
+          (recur (inc i) new-best-sol new-quality)))))              
+  
 
 #_(def d (number-of-collisions-per-node big-data))
 #_(def e (let [small-data (thrush-with-sym [x]
