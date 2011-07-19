@@ -25,6 +25,7 @@
           [2 2] (let [[r1 r1-d] (keys c1) [r2 r2-d] (keys c2)
                       [can1 can2] (map cannonical-value-of-tree-rooted-at [free-tr1 free-tr2] [r1 r2])]
                   (or (= can1 can2) (= (cannonical-value-of-tree-rooted-at free-tr1 r1-d) can2))) false)))
+
 (defn sub-tree-cannonical-value [free-tree]
   (let [inc-or-init #(or (and % (inc %)) 1)]
     (fn sub-tree-can-val [[p-id c-id :as k] cur-mem]
@@ -48,7 +49,10 @@
 
 (defn map-of-cannonical-values-with-all-nodes-as-roots [free-tree]
   (let [[_ can-vals] (reduce (cannonical-values-with-sub-tree-memory free-tree) [{} {}] (keys free-tree))]
-    can-vals))    
+    can-vals))
+
+(defn map-of-log-probs-with-all-nodes-as-roots [free-tree]
+  )
 
 (defn log-number-of-ways-to-build-tree [cannonical-tree-rep]
   "doubtfull .. check this later"
@@ -69,7 +73,7 @@
   ([mp root-id] (apply + 1 (map (partial number-of-nodes mp) (mp root-id))))
   ([mp] (number-of-nodes mp 0)))         
 
-(defn log-probability-and-number-of-children-of-tree [{:keys [acyclic-graph root-id] :or {root-id 0}}]
+(defn log-probability-and-number-of-children-of-tree-recursive [{:keys [acyclic-graph root-id] :or {root-id 0}}]
   (if-let [child-tree-root-ids (seq (acyclic-graph root-id))]
     (let [new-graph-with-root-removed (thrush-with-sym [x] acyclic-graph (dissoc x root-id)
                                         (reduce #(update-in %1 [%2] (fn [set] (disj set root-id))) x child-tree-root-ids))
@@ -80,6 +84,9 @@
           total-number-of-nodes-in-current-tree (inc total-children)
           log-probability-of-current-tree (apply + (log-fact total-children) (- (apply + (map log-fact children-tree-n-nodes))) log-probs)]
       [log-probability-of-current-tree total-number-of-nodes-in-current-tree]) [0 1]))
+
+(defn log-probability-and-number-of-children-of-tree [{:keys [acyclic-graph root-id] :or {root-id 0}}]
+  (loop []))
 
 #_(def mp (-> 10000 generate-random-genealogy genealogy-to-rooted-tree))
 #_(inspect-tree mp)
@@ -95,7 +102,7 @@
 
 #_(generate-random-genealogy 40)
 
-(defn genealogy-to-rooted-tree [genealogy]
+(defn genealogy-to-rooted-acyclic-graph [genealogy]
   (let [[acyclic-graph root-id] (reduce (fn [[graph root-id] [child-id parent-id]]
                                           (if (= parent-id -1) [graph child-id]
                                               [(-> graph
@@ -103,8 +110,15 @@
                                                    (update-in [parent-id] #(if % (conj % child-id) #{child-id}))) root-id]))
                                         [{} -1] genealogy)]
     (self-keyed-map acyclic-graph root-id)))
+
+(defn genealogy-to-rooted-tree [genealogy]
+  (reduce (fn [[rooted-tree root-id] [child-id parent-id]]
+            (if (= parent-id -1) [(assoc-in rooted-tree [child-id :parent] nil) child-id]
+                [(thrush-with-sym [x] rooted-tree
+                   (update-in x [parent-id :children] #(into % [child-id]))
+                   (update-in x [child-id :parent] parent-id)) root-id])) {} genealogy))
     
-(defn rooted-tree-to-genealogy [[graph root-id]]
+(defn rooted-acyclic-graph-to-genealogy [[graph root-id]]
   (loop [genealogy {root-id -1} cur-graph graph [first-root & rest-of-roots] [root-id]]
     (if-not first-root genealogy
             (let [new-roots (cur-graph first-root)]
@@ -174,7 +188,39 @@
                 new-leaf-nodes (into rest-of-leaf-nodes (let [l (find new-graph id2)] (if (= 1 (count (second l))) [l])))]
             (recur new-leaf-nodes new-prufer-code new-graph))))))
 
-(defn best-roots [free-tree]
+(defn edges-in-prufer-order [free-tree]
+  (let [leaf-nodes (into (sorted-map) (filter #(= 1 (count (second %))) free-tree))]
+    (lazy-seq
+     (loop [cur-leaf-nodes leaf-nodes cur-free-tree free-tree edges []]
+       (if (= 2 (count cur-free-tree)) (conj edges (keys free-tree))
+           (let [[id1 neighbouring-nodes] (first cur-leaf-nodes)
+                 [id2] (seq neighbouring-nodes)
+                 rest-of-leaf-nodes (dissoc cur-leaf-nodes id1)
+                 new-free-tree (-> (dissoc cur-free-tree id1) (update-in [id2] #(disj % id1)))
+                 new-leaf-nodes (into rest-of-leaf-nodes (let [l (find new-free-tree id2)] (if (= 1 (count (second l))) [l])))]
+             (recur new-leaf-nodes new-free-tree (conj edges [id1 id2]))))))))
+    
+(defn calc-func-with-all-nodes-as-roots [free-tree outer inner]
+  "calculates value of the function as though all the nodes were roots one at a time using the recursive formula obtained by
+applying inner on all the child-nodes and outer applying on the resultant sequence of values"
+  (let [memory (reduce (fn [cur-mem [current parent]]
+                         (let [children (disj (free-tree current) parent)
+                               child-vals (map (comp inner cur-mem vector) children (repeat current))]
+                           (assoc cur-mem [current parent] (outer child-vals))))
+                       {} (apply concat ((juxt identity #(reverse (map reverse %))) (edges-in-prufer-order free-tree))))]
+    (reduce (fn [new-vals root]
+              (let [child-vals (map (comp inner memory vector) (disj (free-tree root) root) (repeat root))]
+                (assoc new-vals [root] (outer child-vals)))) {} (keys free-tree))))
+
+(defn log-number-of-ways-to-group [group-sizes]
+  (apply log-div (log-fact (apply + group-sizes)) (map log-fact group-sizes)))
+
+(defn log-probs-with-all-nodes-as-roots [free-tree]
+  (let [childs (map first vs)
+        outer-fn (fn [vs] [(apply + 1 childs) (apply log-mult (log-number-of-ways-to-group childs) (map second vs)))]
+    (calc-func-with-all-nodes-as-roots outer-fn identity))))
+
+(defn best-roots-old [free-tree]
   (let [can-vals (map-of-cannonical-values-with-all-nodes-as-roots free-tree)
         num-ways (into {} (map (fn [[root-id cannonical]] [root-id (log-number-of-ways-to-build-tree cannonical)]) can-vals))
         ways-root-ids-group (reduce (fn [mp [id q]] (update-in mp [q] #(conj % id))) num-ways)
