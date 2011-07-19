@@ -75,25 +75,7 @@
                                                 (repeat new-node) (filter (comp not new-parent-nodes) (probable-nearest-bv-ids bv-stuff new-node))))
                 new-genealogy (assoc cur-genealogy new-node parent-node)]
             (recur  new-parent-nodes new-available-nodes new-probable-links new-genealogy))))))
-
-(defn optimize-root-id [{:keys [count bit-vectors] :as bv-stuff} gr]
-  (let [[opt-root-id log-num-ways] (tr/most-probable-root-for-a-given-tree gr)
-        log-parent-child-probability (reduce + (map (fn [[i j]]
-                                                      (let [dist (bit-dist bv-stuff [i j])]
-                                                        (log-probability-of-bv dist count))) (tr/edges-in-prufer-order gr)))]
-    (log-mult log-num-ways log-parent-child-probability))) 
   
-(defn find-good-tree [bv-stuff & {:keys [n-iterations] :or [n-iterations 100]}]
-  (loop [i 0 cur-best-sol nil cur-quality nil]
-    (println cur-quality)
-    (if (= i n-iterations) [cur-best-sol cur-quality]
-        (let [rand-sol (generate-random-probable-solution bv-stuff)
-              [graph-rep root-id] (tr/genealogy-to-rooted-tree rand-sol)
-              [new-sol-quality optimized-root-id] (optimize-root-id graph-rep root-id)
-              [new-best-sol new-quality] (if-not cur-best-sol [[graph-rep optimize-root-id] new-sol-quality]
-                                           (if (> new-sol-quality cur-quality) [[graph-rep optimize-root-id] new-sol-quality]
-                                               [cur-best-sol cur-quality]))]
-          (recur (inc i) new-best-sol new-quality)))))              
     
 #_(def d (number-of-collisions-per-node big-data))
 #_(def e (let [small-data (thrush-with-sym [x]
@@ -103,6 +85,25 @@
             
 (defn-memoized log-probability-of-bv [r n]
   (log-mult (log-pow log-p r) (log-pow log-1-p (- n r))))
+
+(defn optimize-root-id [{:keys [count bit-vectors] :as bv-stuff} gr]
+  (let [[opt-root-id log-num-ways] (tr/most-probable-root-for-a-given-tree gr)
+        log-parent-child-probability (reduce + (map (fn [[i j]]
+                                                      (let [dist (bit-dist bv-stuff [i j])]
+                                                        (log-probability-of-bv dist count))) (tr/edges-in-prufer-order gr)))]
+    [(log-mult log-num-ways log-parent-child-probability) opt-root-id])) 
+
+(defn find-good-tree [bv-stuff & {:keys [n-iterations] :or [n-iterations 100]}]
+  (loop [i 0 cur-best-sol nil cur-quality nil]
+    (println cur-quality)
+    (if (= i n-iterations) [cur-best-sol cur-quality]
+        (let [rand-sol (generate-random-probable-solution bv-stuff)
+              graph-rep (tr/genealogy-to-rooted-acyclic-graph rand-sol)
+              [new-sol-quality optimized-root-id] (optimize-root-id bv-stuff graph-rep)
+              [new-best-sol new-quality] (if-not cur-best-sol [[graph-rep optimize-root-id] new-sol-quality]
+                                                 (if (> new-sol-quality cur-quality) [[graph-rep optimize-root-id] new-sol-quality]
+                                                     [cur-best-sol cur-quality]))]
+          (recur (inc i) new-best-sol new-quality)))))              
 
 (defn closest-point [{:keys [bit-vectors bv-hash-buckets hash-funcs] cnt :count :as bv-stuff} query-bv-id
                      & {:keys [closest-point-among]}]
@@ -138,10 +139,27 @@
         n (count d) dist-memory (atom {})]
     {:distance-memory dist-memory :bit-vectors d :count n}))
 
-(defn solve [fname]
-  (let [bv-stuff (-> (read-bit-vectors "/home/github/bitvector/data/bitvectors-genes.data.small")
-                     (calc-hashes-and-hash-fns :approximation-factor 4))]
-    (find-good-tree bv-stuff)))
+(defn generate-random-bit-vector-set [n]
+  (let [d (->> (fn [] (boolean-array (repeatedly n #({0 false 1 true} (rand-int 2))))) (repeatedly n)  into-array)
+        dist-memory {}]
+    {:distance-memory dist-memory :bit-vectors d :count n}))
+
+(defn generate-input-problem [n]
+  (let [clone (fn [parent mut-prob] (boolean-array (map #(if (< (rand) mut-prob) (not %) %) parent)))
+        bit-vectors (reduce (fn [population id] (into population {id (clone (population (rand-int (count population))) mutation-probability)}))
+                            {0 (boolean-array (repeatedly n #({0 false 1 true} (rand-int 2))))} (range 1 n))
+        dist-memory (atom {})]
+    {:distance-memory dist-memory :bit-vectors bit-vectors :count n}))
+
+(defn solve
+  ([fname]
+     (let [bv-stuff (-> (read-bit-vectors "/home/github/bitvector/data/bitvectors-genes.data.small")
+                        (calc-hashes-and-hash-fns :approximation-factor 4))]
+       (find-good-tree bv-stuff)))
+  ([] (let [bv-stuff (-> (generate-input-problem 10) (calc-hashes-and-hash-fns :approximation-factor 4))]
+        (find-good-tree bv-stuff))))
+
+#_(solve)
 
 #_(def small-data (read-bit-vectors "/home/github/bitvector/data/bitvectors-genes.data.small"))
 
@@ -153,18 +171,6 @@
 (defn display-problem [{:keys [count bit-vectors]}]
   {:n count
    :bvs (map #(apply str (map {true 1 false 0} %)) bit-vectors)})
-
-(defn generate-random-bit-vector-set [n]
-  (let [d (->> (fn [] (boolean-array (repeatedly n #({0 false 1 true} (rand-int 2))))) (repeatedly n)  into-array)
-        dist-memory {}]
-    {:distance-memory dist-memory :bit-vectors d :count n}))
-
-(defn generate-input-problem [n]
-  (let [clone (fn [parent mut-prob] (boolean-array (map #(if (< (rand) mut-prob) (not %) %) parent)))
-        bit-vectors (into-array (reduce (fn [population _] (conj population (clone (rand-nth population) mutation-probability)))
-                                        [(boolean-array (repeatedly n #({0 false 1 true} (rand-int 2))))] (range (dec n))))
-        dist-memory {}]
-    {:distance-memory dist-memory :bit-vectors bit-vectors :count n}))
 
 #_(clojure.pprint/pprint (display-bit-vectors (generate-input-problem 5)))
 
