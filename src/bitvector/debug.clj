@@ -18,6 +18,15 @@
        (def ~name (with-meta ~name
                     (assoc (meta ~name) :source '~&form)))))
 
+(defmacro self-keyed-map [& vals]
+  `(into {} (vector ~@(map (fn [x] (if (symbol? x)
+                                     `(vector ~(-> x name keyword)  ~x)
+                                     `(vector ~(-> (gensym "key-") name keyword) (with-meta ~x {:s-exp '~x}))))
+                             
+                             vals)))) 
+
+#_(self-keyed-map s z)
+
 (defmacro fnd [& rest]
   `(with-meta (fn ~@rest) {:source '~&form}))
 

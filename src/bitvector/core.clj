@@ -3,7 +3,7 @@
             [clojure.contrib.combinatorics :as comb]
             [clojure.data.finger-tree :as ft]
             [clojure.contrib.generic.math-functions :as mfn]
-            [bitvector.tree-utils :as tr])
+            [bitvector.tree-utils :as tr])            
   (:import [java.io BufferedReader BufferedWriter FileReader])
   (:use iterate bitvector.debug clojure.inspector bitvector.log-utils))
 
@@ -13,15 +13,16 @@
 
 (defrecord tree-node [bit-vector number-of-nodes-in-tree-rooted-here tree-quality parent-id children])
 (defn abs [x] (if (< x 0) (- x) x))
+
 (defn-memoized log-parent-child-probability [bit-cnt dist]
   (log-mult (log-pow log-p dist) (log-pow log-1-p (- bit-cnt dist))))
 
 (defn log-hierarchy-seperation-probability [n bit-dist n-seperation-links]
   (let [log-modified-p (apply log-sum (map
-                                   (fn [i] (log-mult (log-combinations n-seperation-links i)
-                                                     (log-pow log-p i)
-                                                     (log-pow log-1-p (- n-seperation-links i))))
-                                   (filter even? (range (inc n-seperation-links)))))
+                                       (fn [i] (log-mult (log-combinations n-seperation-links i)
+                                                         (log-pow log-p i)
+                                                         (log-pow log-1-p (- n-seperation-links i))))
+                                       (filter even? (range (inc n-seperation-links)))))
         log-1-modified-p (mfn/log (- 1 (mfn/exp log-modified-p)))]
     (log-mult (log-pow log-modified-p bit-dist) (log-pow log-1-modified-p (- n bit-dist)))))
            
@@ -40,12 +41,23 @@
         collision-frequencies (into (sorted-map) (frequencies (vals collisions-map)))]
     collision-frequencies))
 
+#_(let [s 10 z 20]
+    (self-keyed-map s z))
 (defn probable-nearest-bv-ids [{:keys [bv-hash-buckets hash-funcs bit-vectors] :as bv-stuff} id]
   (thrush-with-sym [x] hash-funcs (mapcat (fn [[hf-id hf]] ((bv-hash-buckets hf-id) (hf (bit-vectors id)))) x)
     (distinct x) (filter #(not= % id) x)))
 
 (defn probable-links-to [{:keys [bv-hash-buckets hash-funcs] :as bv-stuff} id]
   (map vector (repeat id) (probable-nearest-bv-ids bv-stuff id)))
+
+(defn bit-dist [{memory :distance-memory bit-vectors :bit-vectors} [i j]]
+  (let [bit-dist-help (fn [a b]
+                        (loop [[fa & ra] a [fb & rb] b d 0]
+                          (if (not (nil? fa)) (recur ra rb (if (not= fa fb) (inc d) d)) d)))
+        get-dist (fn [i j] (if-let [[_ v] (find @memory [i j])] v
+                                   (let [v (bit-dist-help (bit-vectors i) (bit-vectors j))]
+                                     (swap! memory #(assoc % [i j] v)) v)))]                   
+    (cond (= i j) 0 (> i j) (get-dist i j) :else (get-dist j i))))
 
 (defn generate-random-probable-solution [{:keys [bit-vectors bv-hash-buckets hash-funcs] cnt :count :as bv-stuff}]
   (let [root-id (rand-int cnt)
@@ -66,13 +78,13 @@
                 new-genealogy (assoc cur-genealogy new-node parent-node)]
             (recur  new-parent-nodes new-available-nodes new-probable-links new-genealogy))))))
 
-(defn optimize-root-id [gr rt-id] [(tr/log-probability-and-number-of-children-of-tree graph-rep optimized-root-id) rt-id])
+(defn optimize-root-id [gr rt-id] [(tr/log-probability-and-number-of-children-of-tree gr rt-id) rt-id])
 
 (defn find-good-tree [bv-stuff & {:keys [n-iterations] :or [n-iterations 100]}]
   (loop [i 0 cur-best-sol nil cur-quality nil]
     (if (= i n-iterations) cur-best-sol
         (let [rand-sol (generate-random-probable-solution bv-stuff)
-              [graph-rep root-id] (genealogy-to-rooted-tree rand-sol)
+              [graph-rep root-id] (tr/genealogy-to-rooted-tree rand-sol)
               [new-sol-quality optimized-root-id] (optimize-root-id graph-rep root-id)
               [new-best-sol new-quality] (if-not cur-best-sol [[graph-rep optimize-root-id] new-sol-quality]
                                            (if (> new-sol-quality cur-quality) [[graph-rep optimize-root-id] new-sol-quality]
@@ -86,15 +98,6 @@
                             (calc-hashes-and-hash-fns x :approximation-factor 2))]
            (number-of-collisions-per-node small-data)))
             
-(defn bit-dist [{memory :distance-memory bit-vectors :bit-vectors} [i j]]
-  (let [bit-dist-help (fn [a b]
-                        (loop [[fa & ra] a [fb & rb] b d 0]
-                          (if (not (nil? fa)) (recur ra rb (if (not= fa fb) (inc d) d)) d)))
-        get-dist (fn [i j] (if-let [[_ v] (find @memory [i j])] v
-                                   (let [v (bit-dist-help (bit-vectors i) (bit-vectors j))]
-                                     (swap! memory #(assoc % [i j] v)) v)))]                   
-    (cond (= i j) 0 (> i j) (get-dist i j) :else (get-dist j i))))
-
 (defn-memoized log-probability-of-bv [r n]
   (log-mult (log-pow log-p r) (log-pow log-1-p (- n r))))
 
