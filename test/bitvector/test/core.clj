@@ -2,5 +2,5 @@
   (:use [bitvector.core])
   (:use [clojure.test]))
 
-(deftest replace-me ;; FIXME: write
-  (is false "No tests have been written."))
+(deftest test-read-bit-vectors
+  (is (read-bit-vectors "/home/github/bitvector/data/bitvectors-genes.data.small")))

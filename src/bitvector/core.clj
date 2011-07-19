@@ -67,11 +67,11 @@
     (loop [parent-nodes #{root-id} available-nodes (disj (set (range cnt)) root-id)
            probable-link-pairs initial-probable-link-pairs cur-genealogy {root-id -1}]
       (if (empty? available-nodes) cur-genealogy
-          (let [cumulative-probs (into (sorted-map) (reductions (fn [[sum _] [lnk p]] [(+ sum p) lnk]) 0 probable-link-pairs))
+          (let [cumulative-probs (into (sorted-map) (reductions (fn [[sum _] [lnk p]] [(+ sum p) lnk]) [0 nil] probable-link-pairs))
                 max-prob (ffirst (rseq cumulative-probs))
-                [parent-node new-node] (second (ffirst (subseq cumulative-probs > (rand max-prob))))
-                new-available-nodes (disj new-node available-nodes)
-                new-parent-nodes (conj new-node parent-nodes)
+                [parent-node new-node] (thrush-with-sym [x] (rand max-prob) (subseq cumulative-probs > x) (second (first x)))
+                new-available-nodes (disj available-nodes new-node)
+                new-parent-nodes (conj parent-nodes new-node)
                 new-probable-links (concat (filter (fn [[[_ cid] _]] (not= cid new-node)) probable-link-pairs)
                                            (map (fn [x y] [[x y] (/ 1.0 (bit-dist bv-stuff [x y]))])
                                                 (repeat new-node) (filter (comp not new-parent-nodes) (probable-nearest-bv-ids bv-stuff new-node))))
@@ -82,7 +82,8 @@
 
 (defn find-good-tree [bv-stuff & {:keys [n-iterations] :or [n-iterations 100]}]
   (loop [i 0 cur-best-sol nil cur-quality nil]
-    (if (= i n-iterations) cur-best-sol
+    (println cur-quality)
+    (if (= i n-iterations) [cur-best-sol cur-quality]
         (let [rand-sol (generate-random-probable-solution bv-stuff)
               [graph-rep root-id] (tr/genealogy-to-rooted-tree rand-sol)
               [new-sol-quality optimized-root-id] (optimize-root-id graph-rep root-id)
@@ -90,7 +91,7 @@
                                            (if (> new-sol-quality cur-quality) [[graph-rep optimize-root-id] new-sol-quality]
                                                [cur-best-sol cur-quality]))]
           (recur (inc i) new-best-sol new-quality)))))              
-  
+    
 
 #_(def d (number-of-collisions-per-node big-data))
 #_(def e (let [small-data (thrush-with-sym [x]
@@ -129,14 +130,31 @@
         bv-hash-buckets (reduce calc-hashes-fn {} bit-vectors)]
     (merge bv-stuff {:bv-hash-buckets bv-hash-buckets :hash-funcs (map-indexed vector hash-funcs)})))
 
-(defn read-bit-vectors [fname]
+
+
+(defn-memoized read-bit-vectors [fname]
   (let [d (time (with-open [rdr (clojure.java.io/reader fname)]
                   (->> (line-seq rdr) (map-indexed #(vector %1 (boolean-array (map {\0 false \1 true} %2)))) (into {}))))
         n (count d) dist-memory (atom {})]
     {:distance-memory dist-memory :bit-vectors d :count n}))
 
+
+(defn solve [fname]
+  (let [bv-stuff (-> (read-bit-vectors "/home/github/bitvector/data/bitvectors-genes.data.small")
+                     (calc-hashes-and-hash-fns :approximation-factor 4))]
+    (find-good-tree bv-stuff)))
+
+#_(def small-data (read-bit-vectors "/home/github/bitvector/data/bitvectors-genes.data.small"))
+
+
+#_(solve "/home/github/bitvector/data/bitvectors-genes.data.small")
+
 (defn display-bit-vectors [{:keys [bit-vectors]}]
   (dorun (map-indexed #(println (str %1 " : " (apply str (map {true 1 false 0} %2)))) bit-vectors)))
+
+(defn display-problem [{:keys [count bit-vectors]}]
+  {:n count
+   :bvs (map #(apply str (map {true 1 false 0} %)) bit-vectors)})
 
 (defn generate-random-bit-vector-set [n]
   (let [d (->> (fn [] (boolean-array (repeatedly n #({0 false 1 true} (rand-int 2))))) (repeatedly n)  into-array)
@@ -149,6 +167,8 @@
                                         [(boolean-array (repeatedly n #({0 false 1 true} (rand-int 2))))] (range (dec n))))
         dist-memory {}]
     {:distance-memory dist-memory :bit-vectors bit-vectors :count n}))
+
+#_(clojure.pprint/pprint (display-bit-vectors (generate-input-problem 5)))
 
 #_(map #(log-probability 100 90 %) (range 1 100 2))
 #_(let [a (range 1 10)

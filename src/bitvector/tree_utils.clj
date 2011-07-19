@@ -69,16 +69,19 @@
   ([mp root-id] (apply + 1 (map (partial number-of-nodes mp) (mp root-id))))
   ([mp] (number-of-nodes mp 0)))         
 
-(defn log-probability-and-number-of-children-of-tree
-  ([mp root-id] (if-let [child-tree-root-ids (mp root-id)]
-                  (let [log-prob-and-n-child-pairs (map (partial log-probability-and-number-of-children-of-tree mp) child-tree-root-ids)
-                        children-tree-n-nodes (map second log-prob-and-n-child-pairs)
-                        log-probs (map first log-prob-and-n-child-pairs)
-                        total-children (apply + children-tree-n-nodes)
-                        total-number-of-nodes-in-current-tree (inc total-children)
-                        log-probability-of-current-tree (apply + (log-fact total-children) (- (apply + (map log-fact children-tree-n-nodes))) log-probs)]
-                    [log-probability-of-current-tree total-number-of-nodes-in-current-tree]) [0 1]))
-  ([mp] (log-probability-and-number-of-children-of-tree mp 0)))
+(defn log-probability-and-number-of-children-of-tree [& {:keys [acyclic-graph root-id] :or {root-id 0}}]
+  (if-let [child-tree-root-ids (acyclic-graph root-id)]
+    (let [log-prob-and-n-child-pairs (map (partial log-probability-and-number-of-children-of-tree :acyclic-graph acyclic-graph :root-id) child-tree-root-ids)
+          children-tree-n-nodes (map second log-prob-and-n-child-pairs)
+          log-probs (map first log-prob-and-n-child-pairs)
+          total-children (apply + children-tree-n-nodes)
+          total-number-of-nodes-in-current-tree (inc total-children)
+          log-probability-of-current-tree (apply + (log-fact total-children) (- (apply + (map log-fact children-tree-n-nodes))) log-probs)]
+      [log-probability-of-current-tree total-number-of-nodes-in-current-tree]) [0 1]))
+
+#_(def mp (-> 10 generate-random-genealogy genealogy-to-rooted-tree))
+#_(inspect-tree mp)
+#_(log-probability-and-number-of-children-of-tree mp)
 
 (defn generate-random-genealogy [n]
   (let [root-id (rand-int n)]
@@ -91,13 +94,14 @@
 #_(generate-random-genealogy 40)
 
 (defn genealogy-to-rooted-tree [genealogy]
-  (reduce (fn [[graph root-id] [child-id parent-id]]
-            (if (= parent-id -1) [graph child-id]
-                [(-> graph
-                     (update-in [child-id] #(if % (conj % parent-id) #{parent-id}))
-                     (update-in [parent-id] #(if % (conj % child-id) #{child-id}))) root-id]))
-          [{} -1] genealogy))
-
+  (let [[acyclic-graph root-id] (reduce (fn [[graph root-id] [child-id parent-id]]
+                                          (if (= parent-id -1) [graph child-id]
+                                              [(-> graph
+                                                   (update-in [child-id] #(if % (conj % parent-id) #{parent-id}))
+                                                   (update-in [parent-id] #(if % (conj % child-id) #{child-id}))) root-id]))
+                                        [{} -1] genealogy)]
+    (self-keyed-map acyclic-graph root-id)))
+    
 (defn rooted-tree-to-genealogy [[graph root-id]]
   (loop [genealogy {root-id -1} cur-graph graph [first-root & rest-of-roots] [root-id]]
     (if-not first-root genealogy
