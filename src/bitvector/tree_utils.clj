@@ -69,9 +69,11 @@
   ([mp root-id] (apply + 1 (map (partial number-of-nodes mp) (mp root-id))))
   ([mp] (number-of-nodes mp 0)))         
 
-(defn log-probability-and-number-of-children-of-tree [& {:keys [acyclic-graph root-id] :or {root-id 0}}]
-  (if-let [child-tree-root-ids (acyclic-graph root-id)]
-    (let [log-prob-and-n-child-pairs (map (partial log-probability-and-number-of-children-of-tree :acyclic-graph acyclic-graph :root-id) child-tree-root-ids)
+(defn log-probability-and-number-of-children-of-tree [{:keys [acyclic-graph root-id] :or {root-id 0}}]
+  (if-let [child-tree-root-ids (seq (acyclic-graph root-id))]
+    (let [new-graph-with-root-removed (thrush-with-sym [x] acyclic-graph (dissoc x root-id)
+                                        (reduce #(update-in %1 [%2] (fn [set] (disj set root-id))) x child-tree-root-ids))
+          log-prob-and-n-child-pairs (map #(log-probability-and-number-of-children-of-tree {:acyclic-graph new-graph-with-root-removed :root-id %}) child-tree-root-ids)
           children-tree-n-nodes (map second log-prob-and-n-child-pairs)
           log-probs (map first log-prob-and-n-child-pairs)
           total-children (apply + children-tree-n-nodes)
@@ -79,7 +81,7 @@
           log-probability-of-current-tree (apply + (log-fact total-children) (- (apply + (map log-fact children-tree-n-nodes))) log-probs)]
       [log-probability-of-current-tree total-number-of-nodes-in-current-tree]) [0 1]))
 
-#_(def mp (-> 10 generate-random-genealogy genealogy-to-rooted-tree))
+#_(def mp (-> 10000 generate-random-genealogy genealogy-to-rooted-tree))
 #_(inspect-tree mp)
 #_(log-probability-and-number-of-children-of-tree mp)
 
