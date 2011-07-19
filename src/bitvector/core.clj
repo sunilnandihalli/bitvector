@@ -41,8 +41,6 @@
         collision-frequencies (into (sorted-map) (frequencies (vals collisions-map)))]
     collision-frequencies))
 
-#_(let [s 10 z 20]
-    (self-keyed-map s z))
 (defn probable-nearest-bv-ids [{:keys [bv-hash-buckets hash-funcs bit-vectors] :as bv-stuff} id]
   (thrush-with-sym [x] hash-funcs (mapcat (fn [[hf-id hf]] ((bv-hash-buckets hf-id) (hf (bit-vectors id)))) x)
     (distinct x) (filter #(not= % id) x)))
@@ -78,8 +76,13 @@
                 new-genealogy (assoc cur-genealogy new-node parent-node)]
             (recur  new-parent-nodes new-available-nodes new-probable-links new-genealogy))))))
 
-(defn optimize-root-id [gr rt-id] [(tr/log-probability-and-number-of-children-of-tree gr rt-id) rt-id])
-
+(defn optimize-root-id [{:keys [count bit-vectors] :as bv-stuff} gr]
+  (let [[opt-root-id log-num-ways] (tr/most-probable-root-for-a-given-tree gr)
+        log-parent-child-probability (reduce + (map (fn [[i j]]
+                                                      (let [dist (bit-dist bv-stuff [i j])]
+                                                        (log-probability-of-bv dist count))) (tr/edges-in-prufer-order gr)))]
+    (log-mult log-num-ways log-parent-child-probability))) 
+  
 (defn find-good-tree [bv-stuff & {:keys [n-iterations] :or [n-iterations 100]}]
   (loop [i 0 cur-best-sol nil cur-quality nil]
     (println cur-quality)
@@ -92,7 +95,6 @@
                                                [cur-best-sol cur-quality]))]
           (recur (inc i) new-best-sol new-quality)))))              
     
-
 #_(def d (number-of-collisions-per-node big-data))
 #_(def e (let [small-data (thrush-with-sym [x]
                             (read-bit-vectors "/home/github/bitvector/data/bitvectors-genes.data.small")
@@ -130,14 +132,11 @@
         bv-hash-buckets (reduce calc-hashes-fn {} bit-vectors)]
     (merge bv-stuff {:bv-hash-buckets bv-hash-buckets :hash-funcs (map-indexed vector hash-funcs)})))
 
-
-
 (defn-memoized read-bit-vectors [fname]
   (let [d (time (with-open [rdr (clojure.java.io/reader fname)]
                   (->> (line-seq rdr) (map-indexed #(vector %1 (boolean-array (map {\0 false \1 true} %2)))) (into {}))))
         n (count d) dist-memory (atom {})]
     {:distance-memory dist-memory :bit-vectors d :count n}))
-
 
 (defn solve [fname]
   (let [bv-stuff (-> (read-bit-vectors "/home/github/bitvector/data/bitvectors-genes.data.small")
@@ -145,7 +144,6 @@
     (find-good-tree bv-stuff)))
 
 #_(def small-data (read-bit-vectors "/home/github/bitvector/data/bitvectors-genes.data.small"))
-
 
 #_(solve "/home/github/bitvector/data/bitvectors-genes.data.small")
 
