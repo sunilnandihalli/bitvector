@@ -216,8 +216,9 @@ applying inner on all the child-nodes and outer applying on the resultant sequen
   (apply log-div (log-fact (apply + group-sizes)) (map log-fact group-sizes)))
 
 (defn log-num-ways-with-all-nodes-as-roots [free-tree]
-  (let [childs (map first vs)
-        outer-fn (fn [vs] [(apply + 1 childs) (apply log-mult (log-number-of-ways-to-group childs) (map second vs))])]
+  (let [outer-fn (fn [vs] (let [childs (map first vs)]
+                            [(apply + 1 childs)
+                             (apply log-mult (log-number-of-ways-to-group childs) (map second vs))]))]
     (into {} (map (fn [[root-id [_ log-prob]]] [root-id log-prob]) (calc-func-with-all-nodes-as-roots outer-fn identity)))))
 
 (defn best-roots-old [free-tree]
