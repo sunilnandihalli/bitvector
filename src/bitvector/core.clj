@@ -104,7 +104,7 @@
 (defn split-edges-at-bit [bit-id s1 s2 edge-coll] (group-by (fn [[i j]] (cond (every? s1 [i j]) [bit-id 1] (every? s2 [i j]) [bit-id 2] :else [bit-id 1 2])) edge-coll))
 (defn min-edge [bv-stuff edge-coll] (if (seq edge-coll) (apply min-key #(bit-dist bv-stuff %) edge-coll)))
 
-(defn edges-to-free-tree [es]
+(defn edges-to-graph [es]
   (reduce (fn [ftr [i j]] (-> ftr (update-in [i] #(if % (into % [j]) #{j})) (update-in [j] #(if % (into % [i]) #{i})))) {} es))
 
 (defn find-random-approximate-minimum-spanning-tree [{:keys [bit-vectors bv-hash-buckets hash-funcs] cnt :count :as bv-stuff}]
@@ -122,10 +122,11 @@
                     (if-not new-edge (recur (conj rest-of-stack (update-in cur-stack-var [:split-directions] rest)) edges-in-tree)
                             (recur (into rest-of-stack (filter (comp seq :node-ids) [{:node-ids s1 :edges e1 :split-directions rest-of-split-dirs}
                                                                                      {:node-ids s2 :edges e2 :split-directions rest-of-split-dirs}]))
-                                   (conj edges-in-tree new-edge)))))) edges-to-free-tree)))
-                  
-        
+                                   (conj edges-in-tree new-edge)))))) edges-to-graph)))
 
+(defn probable-graph [{:keys [bv-hash-buckets] :as bv-stuff}]
+  (-> bv-stuff all-probable-edges edges-to-graph))
+                  
 (defn-memoized log-probability-of-bv [r n]
   (log-mult (log-pow log-p r) (log-pow log-1-p (- n r))))
 

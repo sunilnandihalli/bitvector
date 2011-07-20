@@ -51,9 +51,18 @@
   (let [[_ can-vals] (reduce (cannonical-values-with-sub-tree-memory free-tree) [{} {}] (keys free-tree))]
     can-vals))
 
-(defn map-of-log-probs-with-all-nodes-as-roots [free-tree]
-  )
-
+(defn mst-prim [graph f]
+  (let [[start neighbours] (first graph)]
+    (loop [nodes-in-ftr #{start} edges-in-ftr []
+           all-potential-edges (into (sorted-map) (map (comp (juxt f identity) #(vector start %)) neighbours))]
+      (let [[start end :as best-edge] (second (first all-potential-edges))
+            new-node (if (nodes-in-ftr start) end start)
+            new-nodes-in-ftr (into nodes-in-ftr best-edge)
+            new-potential-edges (into (sorted-map) (filter (fn [_ [i j]] (not (every? new-nodes-in-ftr [i j])))
+                                                           (concat all-potential-edges
+                                                                   (map (comp (juxt f identity) #(vector new-node %)) (graph new-node)))))]
+            (recur new-nodes-in-ftr (conj edges-in-ftr best-edge) new-potential-edges)))))
+                                                           
 (defn log-number-of-ways-to-build-tree [cannonical-tree-rep]
   "doubtfull .. check this later"
   (let [frqs (vals cannonical-tree-rep)
