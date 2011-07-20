@@ -22,8 +22,7 @@
   `(into {} (vector ~@(map (fn [x] (if (symbol? x)
                                      `(vector ~(-> x name keyword)  ~x)
                                      `(vector ~(-> (gensym "key-") name keyword) (with-meta ~x {:s-exp '~x}))))
-                             
-                             vals)))) 
+                           vals)))) 
 
 #_(self-keyed-map s z)
 
@@ -224,7 +223,11 @@
 
 #_(all-fns)
 
-(defmacro print-and-return
+(defn print-and-return
+  ([x] (clojure.pprint/pprint x) x)
+  ([flag x] (clojure.pprint/pprint [flag x]) x))
+
+(defmacro print-and-return-macro
   ([x]
      `(let [x# ~x]
 	(clojure.pprint/pprint x#) x#))

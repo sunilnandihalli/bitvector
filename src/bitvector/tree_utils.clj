@@ -169,28 +169,33 @@
 
 (defn edges-in-prufer-order [free-tree]
   {:pre [free-tree]}
-  (println ['edges-in-prufer-order])
-  (let [leaf-nodes (into (sorted-map) (filter #(= 1 (count (second %))) free-tree))]
+  (let [leaf-nodes (into (sorted-map) (filter #(= 1 (count (let [coll (second %)]
+                                                             (if (coll? coll) coll
+                                                                 (throw (Exception. "error")))))) free-tree))]
     (loop [cur-leaf-nodes leaf-nodes cur-free-tree free-tree edges []]
-      (if (= 2 (count cur-free-tree)) (conj edges (keys free-tree))
+      (if (= 2 (count cur-free-tree)) (conj edges (vec (keys cur-free-tree)))
           (let [[id1 neighbouring-nodes] (first cur-leaf-nodes)
                 [id2] (seq neighbouring-nodes)
                 rest-of-leaf-nodes (dissoc cur-leaf-nodes id1)
                 new-free-tree (-> (dissoc cur-free-tree id1) (update-in [id2] #(disj % id1)))
                 new-leaf-nodes (into rest-of-leaf-nodes (let [l (find new-free-tree id2)] (if (= 1 (count (second l))) [l])))]
             (recur new-leaf-nodes new-free-tree (conj edges [id1 id2])))))))
+
+#_(def ftr {0 #{1 2 3} 1 #{0 4 5} 2 #{0} 3 #{0} 4 #{1} 5 #{1}})
+#_(def es (edges-in-prufer-order ftr))
     
 (defn calc-func-with-all-nodes-as-roots [{free-tree :acyclic-graph} outer inner]
   "calculates value of the function as though all the nodes were roots one at a time using the recursive formula obtained by
 applying inner on all the child-nodes and outer applying on the resultant sequence of values"
-  (let [memory (reduce (fn [cur-mem [current parent]]
-                         (let [children (disj (free-tree current) parent)
-                               child-vals (map (comp inner cur-mem vector) children (repeat current))]
-                           (assoc cur-mem [current parent] (outer child-vals))))
-                       {} (apply concat ((juxt identity #(reverse (map reverse %))) (edges-in-prufer-order free-tree))))]
+  (let [my-map-get (fn [mp] #(if-let [[k v] (find mp %)] v (throw (Exception. "error"))))
+        memory (thrush-with-sym [x] (edges-in-prufer-order free-tree)
+                 ((juxt identity #(reverse (map reverse %))) x) (apply concat x)
+                 (reduce (fn [cur-mem [current parent]]
+                           (let [children (disj (free-tree current) parent)
+                                 child-vals (map (comp inner (my-map-get cur-mem) vector) children (repeat current))]
+                             (assoc cur-mem [current parent] (outer child-vals)))) {} x))]
     (reduce (fn [new-vals cur-root]
-              (let [child-vals (map (comp inner #(get memory % (do (println ['not-found %])
-                                                                   (throw (Exception. %)))) vector) (free-tree cur-root) (repeat cur-root))]
+              (let [child-vals (map (comp inner (my-map-get memory) vector) (free-tree cur-root) (repeat cur-root))]
                 (assoc new-vals [cur-root] (outer child-vals)))) {} (keys free-tree))))
 
 (defn log-number-of-ways-to-group [group-sizes]
@@ -198,10 +203,9 @@ applying inner on all the child-nodes and outer applying on the resultant sequen
 
 (defn log-num-ways-with-all-nodes-as-roots [free-tree]
   {:pre [free-tree]}
-  (let [outer-fn (fn [vs] (letd [vs vs
-                                 number-of-nodes-in-child-trees (map first vs)
-                                 total-number-of-nodes-in-current-tree (apply + 1 number-of-nodes-in-child-trees)
-                                 log-total-num-ways-of-building-current-tree (apply log-mult (log-number-of-ways-to-group number-of-nodes-in-child-trees) (map second vs))]
+  (let [outer-fn (fn [vs] (let [number-of-nodes-in-child-trees (map first vs)
+                                total-number-of-nodes-in-current-tree (apply + 1 number-of-nodes-in-child-trees)
+                                log-total-num-ways-of-building-current-tree (apply log-mult (log-number-of-ways-to-group number-of-nodes-in-child-trees) (map second vs))]
                             [total-number-of-nodes-in-current-tree log-total-num-ways-of-building-current-tree]))]
     (into {} (map (fn [[root-id [_ log-prob]]] [root-id log-prob]) (calc-func-with-all-nodes-as-roots free-tree outer-fn identity)))))
 
@@ -213,8 +217,8 @@ applying inner on all the child-nodes and outer applying on the resultant sequen
 
 (defn most-probable-root-for-a-given-tree [free-tree]
   (let [log-num-ways (log-num-ways-with-all-nodes-as-roots free-tree)
-        [root-id log-num-ways] (apply max-key second log-num-ways)]
-    (self-keyed-map root-id log-num-ways)))
+        [opt-root-id log-num-ways] (apply max-key second log-num-ways)]
+    (self-keyed-map opt-root-id log-num-ways)))
 
 #_(repeatedly 1000 #(let [n (+ 2 (rand-int 1000))
                           g1 (random-tree n)
