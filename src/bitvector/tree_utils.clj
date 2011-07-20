@@ -221,17 +221,6 @@ applying inner on all the child-nodes and outer applying on the resultant sequen
     (inspect-tree all-root-log-num-ways)
     (self-keyed-map opt-root-id log-num-ways all-root-log-num-ways)))
 
-#_(repeatedly 1000 #(let [n (+ 2 (rand-int 1000))
-                          g1 (random-tree n)
-                          trf (random-node-map n)
-                          trf-inv (invert-node-map trf)
-                          x (map trf-inv trf)
-                          g2 (thrush-with-sym [x] g1
-                               (prufer-code-to-graph-rep x)
-                               (transform-graph x trf)
-                               (graph-to-prufer-code x)
-                               (map trf-inv x))]
-                      (apply = (map frequencies [g1 g2]))))
 (defn invert-node-map [node-map-vec]
   (let [n (count node-map-vec)] (reduce (fn [mp i] (assoc mp (node-map-vec i) i)) (vec (repeat n 0))  (range n))))
 (defn random-tree [n] (repeatedly (- n 2) #(rand-int n)))
@@ -246,12 +235,6 @@ applying inner on all the child-nodes and outer applying on the resultant sequen
         graph1-transformed (transform-graph graph1 node-map)]
     (clojure.pprint/pprint [graph1 graph2 graph1-transformed])
     (= graph2 graph1-transformed)))
-
-#_(let [n 10 rand-tree (random-tree n) rand-node-map (random-node-map n)]
-    (println ['n n])
-    (println ['rand-tree rand-tree])
-    (println ['rand-node-map rand-node-map])
-    (check-isomorphism rand-tree rand-node-map))
 
 (defn permutations-repeated
   ([items n]

@@ -62,7 +62,7 @@
   "can come up with a better function"
   (/ 1.0 (+ 0.01 (bit-dist bv-stuff [i j]))))
 
-(defn generate-random-probable-solution [{:keys [bit-vectors bv-hash-buckets hash-funcs] cnt :count :as bv-stuff}]
+(defn generate-random-probable-solution-less-aggressive [{:keys [bit-vectors bv-hash-buckets hash-funcs] cnt :count :as bv-stuff}]
   (let [root-id (rand-int cnt)
         link-quality-pair #((juxt identity (partial bit-vector-pair-link-quality bv-stuff)) [%1 %2])
         len-comp (fn [x y] (< (bit-dist bv-stuff x) (bit-dist bv-stuff y)))
@@ -80,7 +80,25 @@
                                                 (filter (comp not new-parent-nodes) (probable-nearest-bv-ids bv-stuff new-node))))
                 new-genealogy (assoc cur-genealogy new-node parent-node)]
             (recur  new-parent-nodes new-available-nodes new-probable-links new-genealogy))))))  
-            
+
+(defn closest-point [{:keys [bit-vectors bv-hash-buckets hash-funcs] cnt :count :as bv-stuff} query-bv-id
+                     & {:keys [closest-point-among]}]
+  (let [closest-point-among (or closest-point-among #(not= query-bv-id %))
+        cur-bv (bit-vectors query-bv-id)
+        probable-nearest-bv-ids (thrush-with-sym [x] hash-funcs
+                                  (mapcat (fn [[hf-id hf]] ((bv-hash-buckets hf-id) (hf cur-bv))) x)
+                                  (filter closest-point-among x) (distinct x))]
+    (apply min-key #(bit-dist bv-stuff [query-bv-id %]) probable-nearest-bv-ids)))
+
+
+(defn find-minimum-spanning-tree [{:keys [bit-vectors bv-hash-buckets hash-funcs] cnt :count :as bv-stuff}]
+  "the key difference between this and the previous implementation is that the closest-point is chosen without any consideration for the other candidates"
+  (let [root-id (rand-int cnt)
+        link-quality-pair #((juxt identity (partial bit-vector-pair-link-quality bv-stuff)) [%1 %2])
+        len-comp (fn [x y] (apply < (map #(bit-dist bv-stuff %) [x y])))]
+    ))
+        
+
 (defn-memoized log-probability-of-bv [r n]
   (log-mult (log-pow log-p r) (log-pow log-1-p (- n r))))
 
@@ -103,15 +121,6 @@
                                                  (if (apply > (map :total-quality [new-sol-quality cur-quality])) [[graph-rep opt-root-id] new-sol-quality]
                                                      [cur-best-sol cur-quality]))]
           (recur (inc i) new-best-sol new-quality)))))              
-
-(defn closest-point [{:keys [bit-vectors bv-hash-buckets hash-funcs] cnt :count :as bv-stuff} query-bv-id
-                     & {:keys [closest-point-among]}]
-  (let [closest-point-among (or closest-point-among #(not= query-bv-id %))
-        cur-bv (bit-vectors query-bv-id)
-        probable-nearest-bv-ids (thrush-with-sym [x] hash-funcs
-                                  (mapcat (fn [[hf-id hf]] ((bv-hash-buckets hf-id) (hf cur-bv))) x)
-                                  (filter closest-point-among x) (distinct x))]
-    (apply min-key #(bit-dist bv-stuff [query-bv-id %]) probable-nearest-bv-ids)))
 
 (defn brute-force-closest [{:keys [bit-vectors] cnt :count :as bv-stuff} query-bv-id]
   (apply (juxt min-key max-key) #(bit-dist bv-stuff [query-bv-id %]) (filter #(not= % query-bv-id) (range cnt))))
