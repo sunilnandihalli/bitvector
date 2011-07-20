@@ -46,6 +46,9 @@
   (thrush-with-sym [x] hash-funcs (mapcat (fn [[hf-id hf]] ((bv-hash-buckets hf-id) (hf (bit-vectors id)))) x)
     (distinct x) (filter #(not= % id) x)))
 
+(defn all-probable-edges [{:keys [bv-hash-buckets] :as bv-stuff}]
+  (mapcat #(comb/combinations % 2) (mapcat vals (vals bv-hash-buckets))))
+
 (defn probable-links-to [{:keys [bv-hash-buckets hash-funcs] :as bv-stuff} id]
   (map vector (repeat id) (probable-nearest-bv-ids bv-stuff id)))
 
@@ -90,13 +93,37 @@
                                   (filter closest-point-among x) (distinct x))]
     (apply min-key #(bit-dist bv-stuff [query-bv-id %]) probable-nearest-bv-ids)))
 
+(defn rand-int-take-n [n r] (doall (take r (distinct (repeatedly #(rand-int n))))))
+(defn shuffle-take-n [n r] (doall (take r (shuffle (range n)))))
 
-(defn find-minimum-spanning-tree [{:keys [bit-vectors bv-hash-buckets hash-funcs] cnt :count :as bv-stuff}]
+#_(let [tries 1000 n 10000 r 100]
+    (time (dotimes [_ tries] (rand-int-take-n n r)))
+    (time (dotimes [_ tries] (shuffle-take-n n r))))
+
+(defn split-nodes-at-bit [{:keys [bit-vectors] :as bv-stuff} s bit-n] (vals (group-by (fn [[_ bv]] [bit-n (aget bv bit-n)]) s)))
+(defn split-edges-at-bit [bit-id s1 s2 edge-coll] (group-by (fn [[i j]] (cond (every? s1 [i j]) [bit-id 1] (every? s2 [i j]) [bit-id 2] :else [bit-id 1 2])) edge-coll))
+(defn min-edge [bv-stuff edge-coll] (if (seq edge-coll) (apply min-key #(bit-dist bv-stuff %) edge-coll)))
+
+(defn edges-to-free-tree [es]
+  (reduce (fn [ftr [i j]] (-> ftr (update-in [i] #(if % (into % [j]) #{j})) (update-in [j] #(if % (into % [i]) #{i})))) {} es))
+
+(defn find-random-approximate-minimum-spanning-tree [{:keys [bit-vectors bv-hash-buckets hash-funcs] cnt :count :as bv-stuff}]
   "the key difference between this and the previous implementation is that the closest-point is chosen without any consideration for the other candidates"
-  (let [root-id (rand-int cnt)
-        link-quality-pair #((juxt identity (partial bit-vector-pair-link-quality bv-stuff)) [%1 %2])
-        len-comp (fn [x y] (apply < (map #(bit-dist bv-stuff %) [x y])))]
-    ))
+  (let [len-comp (fn [x y] (apply < (map #(bit-dist bv-stuff %) [x y])))
+        edges (all-probable-edges bv-stuff)
+        node-ids (set (range cnt))
+        split-directions (distinct (repeatedly #(rand-int cnt)))]
+    (-> (loop [[{:keys [node-ids edges split-directions] :as cur-stack-var} & rest-of-stack] [(self-keyed-map edges node-ids split-directions)] edges-in-tree []] 
+          (if-not cur-stack-var edges-in-tree
+                  (let [[cur-dir & rest-of-split-dirs] split-directions
+                        [s1 s2] (split-nodes-at-bit bv-stuff node-ids cur-dir)
+                        {e1 [cur-dir 1] e2 [cur-dir 2] e12 [cur-dir 1 2]} (split-edges-at-bit cur-dir s1 s2 edges)
+                        new-edge (min-edge bv-stuff e12)] 
+                    (if-not new-edge (recur (conj rest-of-stack (update-in cur-stack-var [:split-directions] rest)) edges-in-tree)
+                            (recur (into rest-of-stack (filter (comp seq :node-ids) [{:node-ids s1 :edges e1 :split-directions rest-of-split-dirs}
+                                                                                     {:node-ids s2 :edges e2 :split-directions rest-of-split-dirs}]))
+                                   (conj edges-in-tree new-edge)))))) edges-to-free-tree)))
+                  
         
 
 (defn-memoized log-probability-of-bv [r n]
@@ -114,8 +141,7 @@
   (loop [i 0 cur-best-sol nil cur-quality nil]
     (println (self-keyed-map i cur-quality cnt))
     (if (= i n-iterations) [cur-best-sol cur-quality]
-        (let [rand-sol (generate-random-probable-solution bv-stuff)
-              graph-rep (tr/genealogy-to-rooted-acyclic-graph rand-sol)
+        (let [graph-rep (find-random-approximate-minimum-spanning-tree bv-stuff)
               {:keys [log-num-ways log-parent-child-probability total-quality opt-root-id] :as new-sol-quality} (optimize-root-id bv-stuff graph-rep)
               [new-best-sol new-quality] (if-not cur-best-sol [[graph-rep optimize-root-id] new-sol-quality]
                                                  (if (apply > (map :total-quality [new-sol-quality cur-quality])) [[graph-rep opt-root-id] new-sol-quality]
@@ -134,6 +160,7 @@
                                   (let [bit-vectors-with-atleast-one-collision (keep (fn [[_ v]] (if (> (count v) 1) v)) mp)]
                                     (reduce #(reduce disj %1 %2) rem-elements bit-vectors-with-atleast-one-collision)))
                                 (set (range cnt)) (vals hash-buckets)))
+        check-for-continuity (fn [hash-buckets])
         hash-funcs (repeatedly number-of-hashes #(hash-calculating-func hash-length cnt))
         calc-hashes-fn (fn [hash-buckets [id bv]]
                          (reduce (fn [cur-hash-buckets [hash-func-id hash-func]] (update-in cur-hash-buckets [hash-func-id (hash-func bv)] #(conj % id)))
