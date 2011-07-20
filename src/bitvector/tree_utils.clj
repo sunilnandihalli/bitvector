@@ -216,9 +216,10 @@ applying inner on all the child-nodes and outer applying on the resultant sequen
         [q max-ways-root-ids :as ret] (apply max-key first num-ways)] ret))
 
 (defn most-probable-root-for-a-given-tree [free-tree]
-  (let [log-num-ways (log-num-ways-with-all-nodes-as-roots free-tree)
-        [opt-root-id log-num-ways] (apply max-key second log-num-ways)]
-    (self-keyed-map opt-root-id log-num-ways)))
+  (let [all-root-log-num-ways (log-num-ways-with-all-nodes-as-roots free-tree)
+        [opt-root-id log-num-ways] (apply max-key second all-root-log-num-ways)]
+    (inspect-tree all-root-log-num-ways)
+    (self-keyed-map opt-root-id log-num-ways all-root-log-num-ways)))
 
 #_(repeatedly 1000 #(let [n (+ 2 (rand-int 1000))
                           g1 (random-tree n)
