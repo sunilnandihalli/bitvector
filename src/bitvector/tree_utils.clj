@@ -191,12 +191,6 @@ applying inner on all the child-nodes and outer applying on the resultant sequen
       (map (fn [[root-id [_ log-prob]]] [root-id log-prob]) x)
       (into {} x))))
 
-(defn best-roots-old [free-tree]
-  (let [can-vals (map-of-cannonical-values-with-all-nodes-as-roots free-tree)
-        num-ways (into {} (map (fn [[root-id cannonical]] [root-id (log-number-of-ways-to-build-tree cannonical)]) can-vals))
-        ways-root-ids-group (reduce (fn [mp [id q]] (update-in mp [q] #(conj % id))) num-ways)
-        [q max-ways-root-ids :as ret] (apply max-key first num-ways)] ret))
-
 (defn most-probable-root-for-a-given-tree [free-tree]
   (let [all-root-log-num-ways (log-num-ways-with-all-nodes-as-roots free-tree)
         [opt-root-id log-num-ways] (apply max-key second all-root-log-num-ways)]
