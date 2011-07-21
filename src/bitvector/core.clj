@@ -3,6 +3,7 @@
             [clojure.contrib.combinatorics :as comb]
             [clojure.data.finger-tree :as ft]
             [clojure.contrib.generic.math-functions :as mfn]
+            [clojure.contrib.profile :as prf]
             [bitvector.tree-utils :as tr])            
   (:import [java.io BufferedReader BufferedWriter FileReader])
   (:use iterate bitvector.debug clojure.inspector bitvector.log-utils))
@@ -44,23 +45,14 @@
   (map vector (repeat id) (probable-nearest-bv-ids bv-stuff id)))
 
 (defn bit-dist [{memory :distance-memory bit-vectors :bit-vectors} [i j]]
-  (let [bit-dist-help (fn [a b]
-                        (loop [[fa & ra] a [fb & rb] b d 0]
-                          (if (not (nil? fa)) (recur ra rb (if (not= fa fb) (inc d) d)) d)))
-        get-dist (fn [i j] (if-let [[_ v] (find @memory [i j])] v
-                                   (let [v (bit-dist-help (bit-vectors i) (bit-vectors j))]
-                                     (swap! memory #(assoc % [i j] v)) v)))]                   
-    (cond (= i j) 0 (> i j) (get-dist i j) :else (get-dist j i))))
+  (prf/prof :bit-dist (let [bit-dist-help (fn [a b]
+                                            (loop [[fa & ra] a [fb & rb] b d 0]
+                                              (if (not (nil? fa)) (recur ra rb (if (not= fa fb) (inc d) d)) d)))
+                            get-dist (fn [i j] (if-let [[_ v] (find @memory [i j])] v
+                                                       (let [v (bit-dist-help (bit-vectors i) (bit-vectors j))]
+                                                         (swap! memory #(assoc % [i j] v)) v)))]                   
+                        (cond (= i j) 0 (> i j) (get-dist i j) :else (get-dist j i)))))
 
-
-(defn closest-point [{:keys [bit-vectors bv-hash-buckets hash-funcs] cnt :count :as bv-stuff} query-bv-id
-                     & {:keys [closest-point-among]}]
-  (let [closest-point-among (or closest-point-among #(not= query-bv-id %))
-        cur-bv (bit-vectors query-bv-id)
-        probable-nearest-bv-ids (thrush-with-sym [x] hash-funcs
-                                  (mapcat (fn [[hf-id hf]] ((bv-hash-buckets hf-id) (hf cur-bv))) x)
-                                  (filter closest-point-among x) (distinct x))]
-    (apply min-key #(bit-dist bv-stuff [query-bv-id %]) probable-nearest-bv-ids)))
 
 (defn split-nodes-at-bit [{:keys [bit-vectors] :as bv-stuff} s bit-n] (vals (group-by (fn [[_ bv]] [bit-n (aget bv bit-n)]) s)))
 (defn split-edges-at-bit [bit-id s1 s2 edge-coll] (group-by (fn [[i j]] (cond (every? s1 [i j]) [bit-id 1] (every? s2 [i j]) [bit-id 2] :else [bit-id 1 2])) edge-coll))
@@ -88,10 +80,11 @@
   ([genealogy] (write-genealogy genealogy "parents.out")))
 
 (defn find-good-tree [{cnt :count :as bv-stuff} & {:keys [n-iterations] :or {n-iterations 100}}]
-  (let [graph-rep (probable-graph bv-stuff)
-        minimum-spanning-free-tree (tr/mst-prim graph-rep (fnd [x] (bit-dist bv-stuff x)))
-        {:keys [log-num-ways log-parent-child-probability total-quality opt-root-id] :as new-sol-quality} (optimize-root-id bv-stuff minimum-spanning-free-tree)
-        genealogy (tr/rooted-acyclic-graph-to-genealogy [minimum-spanning-free-tree opt-root-id])] genealogy))
+  (let [graph-rep (prf/prof :probable-graph (probable-graph bv-stuff))
+        is-graph-connected (prf/prof :is-graph-connected (tr/is-graph-connected graph-rep))
+        minimum-spanning-free-tree (prf/prof :mst-prim (tr/mst-prim graph-rep (fnd [x] (bit-dist bv-stuff x))))
+        {:keys [log-num-ways log-parent-child-probability total-quality opt-root-id] :as new-sol-quality} (prf/prof :optimize-root-id (optimize-root-id bv-stuff minimum-spanning-free-tree))
+        genealogy (prf/prof :rooted-acyclic-graph-to-genealogy (tr/rooted-acyclic-graph-to-genealogy [minimum-spanning-free-tree opt-root-id]))] genealogy))
            
 (defn calc-hashes-and-hash-fns [{:keys [bit-vectors] cnt :count :as bv-stuff} & {:keys [approximation-factor theta-const hash-length number-of-hashes]
                                                                                  :or {approximation-factor 4 theta-const 2}}]
@@ -110,7 +103,7 @@
         bv-hash-buckets (reduce calc-hashes-fn {} bit-vectors)]
     (merge bv-stuff {:bv-hash-buckets bv-hash-buckets :hash-funcs (map-indexed vector hash-funcs)})))
 
-(defn-memoized read-bit-vectors [fname]
+(defn read-bit-vectors [fname]
   (let [d (time (with-open [rdr (clojure.java.io/reader fname)]
                   (->> (line-seq rdr) (map-indexed #(vector %1 (boolean-array (map {\0 false \1 true} %2)))) (into {}))))
         n (count d) dist-memory (atom {})]
@@ -136,9 +129,11 @@
 
 (defn solve
   ([fname out-fname]
-     (let [bv-stuff (-> (read-bit-vectors fname)
-                        (calc-hashes-and-hash-fns :approximation-factor 4))]
-       (write-genealogy (find-good-tree bv-stuff) out-fname)))
+     (let [bv-stuff (thrush-with-sym [x] (prf/prof :read (read-bit-vectors fname))
+                      (prf/prof :calc-hashes-on-input-bitvectors (calc-hashes-and-hash-fns x :approximation-factor 4)))
+           genealogy (prf/prof :find-good-tree (find-good-tree bv-stuff))]
+       (save-local-variables)
+       (write-genealogy  genealogy out-fname)))
   ([out-fname] (let [bv-stuff (-> (generate-input-problem 10) (calc-hashes-and-hash-fns :approximation-factor 4))]
                  (write-genealogy (find-good-tree bv-stuff) out-fname)))
   ([] (solve "parents.out")))
