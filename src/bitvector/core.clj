@@ -178,6 +178,18 @@
         n (count d) dist-memory (atom {})]
     {:distance-memory dist-memory :bit-vectors d :count n}))
 
+(defn read-bit-vector-solution [fname]
+  (time (with-open [rdr (clojure.java.io/reader fname)]
+          (->> (line-seq rdr) (filter seq)
+               (map-indexed #(vector %1 (read-string %2)))
+               (into {})))))
+
+#_(thrush-with-sym [x]
+    (read-bit-vector-solution  "/home/github/bitvector/data/bitvectors-parents.data.small.txt")
+    (tr/genealogy-to-rooted-acyclic-graph x) 
+    [(:root-id x) (tr/most-probable-root-for-a-given-tree (:acyclic-graph x))] (inspect-tree x))
+                    
+
 (defn generate-random-bit-vector-set [n]
   (let [d (->> (fn [] (boolean-array (repeatedly n #({0 false 1 true} (rand-int 2))))) (repeatedly n)  into-array)
         dist-memory {}]
