@@ -61,7 +61,18 @@
             new-potential-edges (into (sorted-map) (filter (fn [_ [i j]] (not (every? new-nodes-in-ftr [i j])))
                                                            (concat all-potential-edges
                                                                    (map (comp (juxt f identity) #(vector new-node %)) (graph new-node)))))]
-            (recur new-nodes-in-ftr (conj edges-in-ftr best-edge) new-potential-edges)))))
+        (recur new-nodes-in-ftr (conj edges-in-ftr best-edge) new-potential-edges)))))
+
+(defn is-graph-connected [graph]
+  (let [nodes (set (keys graph)) first-node (first nodes)]
+    (empty? (loop [unvisited-nodes (disj nodes first-node) [cur-front-node & rest-of-front] [first-node]]
+              (if-not cur-front-node unvisited-nodes
+                      (let [unvisited-neighbours (filter unvisited-nodes (graph cur-front-node))
+                            new-unvisited-nodes (apply disj unvisited-nodes unvisited-neighbours)
+                            new-front (into rest-of-front unvisited-neighbours)]
+                        (recur new-unvisited-nodes new-front)))))))
+
+(defn edges-of-graph [graph] (mapcat (fn [[node neighbours]] (keep #(if (< % node) (set node %)) neighbours)) graph))
                                                            
 (defn log-number-of-ways-to-build-tree [cannonical-tree-rep]
   "doubtfull .. check this later"
@@ -107,7 +118,7 @@
                    (update-in x [child-id :parent] parent-id)) root-id])) {} genealogy))
     
 (defn rooted-acyclic-graph-to-genealogy [[graph root-id]]
-  (loop [genealogy {root-id -1} cur-graph graph [first-root & rest-of-roots] [root-id]]
+  (loop [genealogy (sorted-map root-id -1) cur-graph graph [first-root & rest-of-roots] [root-id]]
     (if-not first-root genealogy
             (let [new-roots (cur-graph first-root)]
               (recur (reduce #(assoc %1 %2 first-root) genealogy new-roots)

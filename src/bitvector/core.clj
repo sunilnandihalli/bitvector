@@ -33,6 +33,8 @@
                        (if (aget bv bv-pos-id)
                          (bit-set hash hash-loc-id) hash)) 0 (map-indexed vector ids)))))
 
+
+
 (defn number-of-collisions-per-node [{:keys [bv-hash-buckets]}]
   (let [update-freq (fn [mp [_ coll]]
                       (let [n-1 (dec (count coll))]
@@ -138,16 +140,19 @@
         total-quality (log-mult log-num-ways log-parent-child-probability)]
     (self-keyed-map log-num-ways log-parent-child-probability total-quality opt-root-id))) 
 
+(defn write-genealogy
+  ([genealogy out-fname]
+     (let [parents (apply str (interpose "\n" (vals (into (sorted-map) genealogy))))]
+       (spit out-fname parents)))
+  ([genealogy] (write-genealogy genealogy "parents.out")))
+
 (defn find-good-tree [{cnt :count :as bv-stuff} & {:keys [n-iterations] :or {n-iterations 100}}]
-  (loop [i 0 cur-best-sol nil cur-quality nil]
-    (println (self-keyed-map i cur-quality cnt))
-    (if (= i n-iterations) [cur-best-sol cur-quality]
-        (let [graph-rep (find-random-approximate-minimum-spanning-tree bv-stuff)
-              {:keys [log-num-ways log-parent-child-probability total-quality opt-root-id] :as new-sol-quality} (optimize-root-id bv-stuff graph-rep)
-              [new-best-sol new-quality] (if-not cur-best-sol [[graph-rep optimize-root-id] new-sol-quality]
-                                                 (if (apply > (map :total-quality [new-sol-quality cur-quality])) [[graph-rep opt-root-id] new-sol-quality]
-                                                     [cur-best-sol cur-quality]))]
-          (recur (inc i) new-best-sol new-quality)))))              
+  (let [graph-rep (probable-graph bv-stuff)
+        minimum-spanning-free-tree (tr/mst-prim graph-rep #(bit-dist bv-stuff %))
+        {:keys [log-num-ways log-parent-child-probability total-quality opt-root-id] :as new-sol-quality} (optimize-root-id bv-stuff minimum-spanning-free-tree)
+        genealogy (tr/rooted-acyclic-graph-to-genealogy [minimum-spanning-free-tree opt-root-id])] genealogy))
+    
+    
 
 (defn brute-force-closest [{:keys [bit-vectors] cnt :count :as bv-stuff} query-bv-id]
   (apply (juxt min-key max-key) #(bit-dist bv-stuff [query-bv-id %]) (filter #(not= % query-bv-id) (range cnt))))
@@ -188,12 +193,13 @@
     {:distance-memory dist-memory :bit-vectors bit-vectors :count n}))
 
 (defn solve
-  ([fname]
+  ([fname out-fname]
      (let [bv-stuff (-> (read-bit-vectors fname)
                         (calc-hashes-and-hash-fns :approximation-factor 4))]
-       (find-good-tree bv-stuff)))
-  ([] (let [bv-stuff (-> (generate-input-problem 10) (calc-hashes-and-hash-fns :approximation-factor 4))]
-        (find-good-tree bv-stuff))))
+       (write-genealogy (find-good-tree bv-stuff) out-fname)))
+  ([out-fname] (let [bv-stuff (-> (generate-input-problem 10) (calc-hashes-and-hash-fns :approximation-factor 4))]
+                 (write-genealogy (find-good-tree bv-stuff) out-fname)))
+  ([] (solve "parents.out")))
 
 #_(solve)
 
