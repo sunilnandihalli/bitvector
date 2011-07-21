@@ -51,18 +51,26 @@
   (let [[_ can-vals] (reduce (cannonical-values-with-sub-tree-memory free-tree) [{} {}] (keys free-tree))]
     can-vals))
 
+(defn edges-to-graph [es]
+  (reduce (fn [ftr [i j]] (-> ftr (update-in [i] #(if % (into % [j]) #{j})) (update-in [j] #(if % (into % [i]) #{i})))) {} es))
+
 (defn mst-prim [graph f]
   (let [[start neighbours] (first graph)]
-    (loop [nodes-in-ftr #{start} edges-in-ftr []
-           all-potential-edges (into (sorted-map) (map (comp (juxt f identity) #(vector start %)) neighbours))]
-      (let [[start end :as best-edge] (second (first all-potential-edges))
-            new-node (if (nodes-in-ftr start) end start)
-            new-nodes-in-ftr (into nodes-in-ftr best-edge)
-            new-potential-edges (into (sorted-map) (filter (fn [_ [i j]] (not (every? new-nodes-in-ftr [i j])))
-                                                           (concat all-potential-edges
-                                                                   (map (comp (juxt f identity) #(vector new-node %)) (graph new-node)))))]
-        (recur new-nodes-in-ftr (conj edges-in-ftr best-edge) new-potential-edges)))))
-
+    (-> (loop [nodes-in-ftr #{start} edges-in-ftr []
+               all-potential-edges (into (sorted-map) (map (comp (juxt f identity) #(vector start %)) neighbours))]
+          (if-not (seq all-potential-edges) edges-in-ftr
+                  (let [[start end :as best-edge] (second (first all-potential-edges))
+                        new-node (if (nodes-in-ftr start) end start)
+                        new-nodes-in-ftr (into nodes-in-ftr best-edge)
+                        new-potential-edges (thrush-with-sym [x]
+                                              (graph new-node)
+                                              (map (comp (juxt f identity) #(vector new-node %)) x)
+                                              (concat all-potential-edges x)
+                                              (filter (fn [[_ [i j]]] (not (every? new-nodes-in-ftr [i j]))) x)
+                                              (into (sorted-map) x))]
+                    (recur new-nodes-in-ftr (conj edges-in-ftr best-edge) new-potential-edges))))
+        edges-to-graph)))
+  
 (defn is-graph-connected [graph]
   (let [nodes (set (keys graph)) first-node (first nodes)]
     (empty? (loop [unvisited-nodes (disj nodes first-node) [cur-front-node & rest-of-front] [first-node]]
@@ -118,12 +126,14 @@
                    (update-in x [child-id :parent] parent-id)) root-id])) {} genealogy))
     
 (defn rooted-acyclic-graph-to-genealogy [[graph root-id]]
-  (loop [genealogy (sorted-map root-id -1) cur-graph graph [first-root & rest-of-roots] [root-id]]
-    (if-not first-root genealogy
-            (let [new-roots (cur-graph first-root)]
-              (recur (reduce #(assoc %1 %2 first-root) genealogy new-roots)
-                     (reduce (fn [gr n-root] (update-in gr [n-root] #(disj % first-root))) cur-graph new-roots)
-                     (into rest-of-roots new-roots))))))
+  {:pre [(is-graph-connected graph)]}
+  (loop [genealogy (sorted-map root-id -1) cur-graph graph [cur-root & rest-of-roots] [root-id]]
+    (if-not cur-root genealogy
+            (let [new-roots (cur-graph cur-root)
+                  new-genealogy (reduce #(assoc %1 %2 cur-root) genealogy new-roots)
+                  new-graph (reduce (fn [gr n-root] (update-in gr [n-root] #(disj % cur-root))) cur-graph new-roots)
+                  new-roots-front (into rest-of-roots new-roots)]
+              (recur new-genealogy new-graph new-roots-front)))))
 
 #_(let [tr (generate-random-genealogy 100)]
     (println tr)
@@ -205,6 +215,7 @@
 #_(def es (edges-in-prufer-order ftr))
     
 (defn calc-func-with-all-nodes-as-roots [{free-tree :acyclic-graph} outer inner]
+  {:pre [free-tree]}
   "calculates value of the function as though all the nodes were roots one at a time using the recursive formula obtained by
 applying inner on all the child-nodes and outer applying on the resultant sequence of values"
   (let [my-map-get (fn [mp] #(if-let [[k v] (find mp %)] v (throw (Exception. "error"))))
@@ -216,18 +227,21 @@ applying inner on all the child-nodes and outer applying on the resultant sequen
                              (assoc cur-mem [current parent] (outer child-vals)))) {} x))]
     (reduce (fn [new-vals cur-root]
               (let [child-vals (map (comp inner (my-map-get memory) vector) (free-tree cur-root) (repeat cur-root))]
-                (assoc new-vals [cur-root] (outer child-vals)))) {} (keys free-tree))))
+                (assoc new-vals cur-root (outer child-vals)))) {} (keys free-tree))))
 
 (defn log-number-of-ways-to-group [group-sizes]
   (apply log-div (log-fact (apply + group-sizes)) (map log-fact group-sizes)))
 
-(defn log-num-ways-with-all-nodes-as-roots [free-tree]
-  {:pre [free-tree]}
+(defn log-num-ways-with-all-nodes-as-roots [acyclic-graph]
+  {:pre [acyclic-graph]}
   (let [outer-fn (fn [vs] (let [number-of-nodes-in-child-trees (map first vs)
                                 total-number-of-nodes-in-current-tree (apply + 1 number-of-nodes-in-child-trees)
                                 log-total-num-ways-of-building-current-tree (apply log-mult (log-number-of-ways-to-group number-of-nodes-in-child-trees) (map second vs))]
-                            [total-number-of-nodes-in-current-tree log-total-num-ways-of-building-current-tree]))]
-    (into {} (map (fn [[root-id [_ log-prob]]] [root-id log-prob]) (calc-func-with-all-nodes-as-roots free-tree outer-fn identity)))))
+                            [total-number-of-nodes-in-current-tree log-total-num-ways-of-building-current-tree]))
+        func-vals-at-all-roots (calc-func-with-all-nodes-as-roots (self-keyed-map acyclic-graph) outer-fn identity)]
+    (thrush-with-sym [x] func-vals-at-all-roots
+      (map (fn [[root-id [_ log-prob]]] [root-id log-prob]) x)
+      (into {} x))))
 
 (defn best-roots-old [free-tree]
   (let [can-vals (map-of-cannonical-values-with-all-nodes-as-roots free-tree)
@@ -238,7 +252,6 @@ applying inner on all the child-nodes and outer applying on the resultant sequen
 (defn most-probable-root-for-a-given-tree [free-tree]
   (let [all-root-log-num-ways (log-num-ways-with-all-nodes-as-roots free-tree)
         [opt-root-id log-num-ways] (apply max-key second all-root-log-num-ways)]
-    (inspect-tree all-root-log-num-ways)
     (self-keyed-map opt-root-id log-num-ways all-root-log-num-ways)))
 
 (defn invert-node-map [node-map-vec]

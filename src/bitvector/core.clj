@@ -106,8 +106,6 @@
 (defn split-edges-at-bit [bit-id s1 s2 edge-coll] (group-by (fn [[i j]] (cond (every? s1 [i j]) [bit-id 1] (every? s2 [i j]) [bit-id 2] :else [bit-id 1 2])) edge-coll))
 (defn min-edge [bv-stuff edge-coll] (if (seq edge-coll) (apply min-key #(bit-dist bv-stuff %) edge-coll)))
 
-(defn edges-to-graph [es]
-  (reduce (fn [ftr [i j]] (-> ftr (update-in [i] #(if % (into % [j]) #{j})) (update-in [j] #(if % (into % [i]) #{i})))) {} es))
 
 (defn find-random-approximate-minimum-spanning-tree [{:keys [bit-vectors bv-hash-buckets hash-funcs] cnt :count :as bv-stuff}]
   "the key difference between this and the previous implementation is that the closest-point is chosen without any consideration for the other candidates"
@@ -124,10 +122,10 @@
                     (if-not new-edge (recur (conj rest-of-stack (update-in cur-stack-var [:split-directions] rest)) edges-in-tree)
                             (recur (into rest-of-stack (filter (comp seq :node-ids) [{:node-ids s1 :edges e1 :split-directions rest-of-split-dirs}
                                                                                      {:node-ids s2 :edges e2 :split-directions rest-of-split-dirs}]))
-                                   (conj edges-in-tree new-edge)))))) edges-to-graph)))
+                                   (conj edges-in-tree new-edge)))))) tr/edges-to-graph)))
 
 (defn probable-graph [{:keys [bv-hash-buckets] :as bv-stuff}]
-  (-> bv-stuff all-probable-edges edges-to-graph))
+  (-> bv-stuff all-probable-edges tr/edges-to-graph))
                   
 (defn-memoized log-probability-of-bv [r n]
   (log-mult (log-pow log-p r) (log-pow log-1-p (- n r))))
@@ -136,7 +134,7 @@
   (let [{:keys [opt-root-id log-num-ways]} (tr/most-probable-root-for-a-given-tree gr)
         log-parent-child-probability (reduce + (map (fn [[i j]]
                                                       (let [dist (bit-dist bv-stuff [i j])]
-                                                        (log-probability-of-bv dist count))) (tr/edges-in-prufer-order (:acyclic-graph gr))))
+                                                        (log-probability-of-bv dist count))) (tr/edges-in-prufer-order gr)))
         total-quality (log-mult log-num-ways log-parent-child-probability)]
     (self-keyed-map log-num-ways log-parent-child-probability total-quality opt-root-id))) 
 
@@ -148,7 +146,7 @@
 
 (defn find-good-tree [{cnt :count :as bv-stuff} & {:keys [n-iterations] :or {n-iterations 100}}]
   (let [graph-rep (probable-graph bv-stuff)
-        minimum-spanning-free-tree (tr/mst-prim graph-rep #(bit-dist bv-stuff %))
+        minimum-spanning-free-tree (tr/mst-prim graph-rep (fnd [x] (bit-dist bv-stuff x)))
         {:keys [log-num-ways log-parent-child-probability total-quality opt-root-id] :as new-sol-quality} (optimize-root-id bv-stuff minimum-spanning-free-tree)
         genealogy (tr/rooted-acyclic-graph-to-genealogy [minimum-spanning-free-tree opt-root-id])] genealogy))
     
