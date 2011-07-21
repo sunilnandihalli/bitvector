@@ -82,24 +82,10 @@
 
 (defn edges-of-graph [graph] (mapcat (fn [[node neighbours]] (keep #(if (< % node) (set node %)) neighbours)) graph))
                                                            
-(defn log-number-of-ways-to-build-tree [cannonical-tree-rep]
-  "doubtfull .. check this later"
-  (let [frqs (vals cannonical-tree-rep)
-        n (apply + frqs)]
-    (if (= n 0) 0 (apply + (log-fact n) #_(- (apply + (map log-fact frqs)))
-                         (map (fn [[key frq]] (* frq (log-number-of-ways-to-build-tree key))) cannonical-tree-rep)))))
-
 (let [alpha 2.955765 beta 0.5349485 ln-alpha (mfn/log alpha) ln-beta (mfn/log beta)
       coefficients [0.5349496061 0.441699018 0.485387731 2.379745574]]
   (defn-memoized log-number-of-non-isomorphic-trees [n]
     (+ (* ln-alpha n) (* -2.5 (mfn/log n)) (mfn/log (apply + (map * coefficients (iterate #(/ % n) 1)))))))
-
-(defn random-highly-probable-tree [n]
-  (reduce (fn [mp i] (-> mp (update-in [(rand-int i)] #(conj % i)) (assoc i nil))) {0 nil} (range 1 n)))
-
-(defn number-of-nodes
-  ([mp root-id] (apply + 1 (map (partial number-of-nodes mp) (mp root-id))))
-  ([mp] (number-of-nodes mp 0)))         
 
 (defn generate-random-genealogy [n]
   (let [root-id (rand-int n)]
@@ -118,13 +104,6 @@
                                         [{} -1] genealogy)]
     (self-keyed-map acyclic-graph root-id)))
 
-#_(defn genealogy-to-rooted-tree [genealogy]
-  (reduce (fn [[rooted-tree root-id] [child-id parent-id]]
-            (if (= parent-id -1) [(assoc-in rooted-tree [child-id :parent] nil) child-id]
-                [(thrush-with-sym [x] rooted-tree
-                   (update-in x [parent-id :children] #(into % [child-id]))
-                   (update-in x [child-id :parent] parent-id)) root-id])) {} genealogy))
-    
 (defn rooted-acyclic-graph-to-genealogy [[graph root-id]]
   {:pre [(is-graph-connected graph)]}
   (loop [genealogy (sorted-map root-id -1) cur-graph graph [cur-root & rest-of-roots] [root-id]]
@@ -135,37 +114,9 @@
                   new-roots-front (into rest-of-roots new-roots)]
               (recur new-genealogy new-graph new-roots-front)))))
 
-#_(let [tr (generate-random-genealogy 100)]
-    (println tr)
-    (= tr (-> tr genealogy-to-rooted-tree rooted-tree-to-genealogy)))        
-
-#_(def d (time (let [pruf-code (random-tree 5)
-                     g (prufer-code-to-graph-rep pruf-code)
-                     can-vals (map-of-cannonical-values-with-all-nodes-as-roots g)
-                     num-ways (map (fn [[root-id cannonical]] [root-id (log-number-of-ways-to-build-tree cannonical)]) can-vals)
-                     c (center-of-tree g)
-                     ways-root-ids-group (into {}
-                                               (map (fn [[k vs]] [k (map first vs)])
-                                                    (group-by second num-ways)))
-                     max-ways-root-id (apply max-key first ways-root-ids-group)]
-                 [max-ways-root-id ways-root-ids-group g c can-vals])))
-#_(def d (let [pruf-code (random-tree 10)]
-           (prufer-code-to-graph-rep pruf-code)))
-               
-
-#_(def d (let [pruf-code (random-tree 10)
-               g (prufer-code-to-graph-rep pruf-code)
-               freq-pruf-code (frequencies pruf-code)
-               perms (permutations-repeated freq-pruf-code)
-               graphs (map prufer-code-to-graph-rep perms)]
-           (cannonical-value-of-tree-rooted-at g 3)
-           #_(map #(tree-isomorphic? g %) graphs)))
-
-
 (defn a-update [arr [:as keys] f]
   (let [v (f (apply aget arr keys))]
     (apply aset arr (conj keys v)) arr))
-
 
 (defn for-each-edge
   ([f f-arg prufer-code]
@@ -210,9 +161,6 @@
                 new-free-tree (-> (dissoc cur-free-tree id1) (update-in [id2] #(disj % id1)))
                 new-leaf-nodes (into rest-of-leaf-nodes (let [l (find new-free-tree id2)] (if (= 1 (count (second l))) [l])))]
             (recur new-leaf-nodes new-free-tree (conj edges [id1 id2])))))))
-
-#_(def ftr {0 #{1 2 3} 1 #{0 4 5} 2 #{0} 3 #{0} 4 #{1} 5 #{1}})
-#_(def es (edges-in-prufer-order ftr))
     
 (defn calc-func-with-all-nodes-as-roots [{free-tree :acyclic-graph} outer inner]
   {:pre [free-tree]}
