@@ -1,5 +1,6 @@
 (ns bitvector.tree-utils
-  (:require [clojure.contrib.generic.math-functions :as mfn])
+  (:require [clojure.contrib.generic.math-functions :as mfn]
+            [clojure.contrib.profile :as prf])  
   (:use iterate bitvector.debug clojure.inspector bitvector.log-utils))
 
 (defn center-of-tree [tree]
@@ -54,8 +55,9 @@
 (defn edges-to-graph [es]
   (reduce (fn [ftr [i j]] (-> ftr (update-in [i] #(if % (into % [j]) #{j})) (update-in [j] #(if % (into % [i]) #{i})))) {} es))
 
-(defn mst-prim [graph f]
-  (let [[start neighbours] (first graph)]
+(defn mst-prim [graph untimed-f]
+  (let [f #(prf/prof :bit-dist-mst-prim (untimed-f %))
+        [start neighbours] (first graph)]
     (-> (loop [nodes-in-ftr #{start} edges-in-ftr []
                all-potential-edges (into (sorted-map) (map (comp (juxt f identity) #(vector start %)) neighbours))]
           (if-not (seq all-potential-edges) edges-in-ftr

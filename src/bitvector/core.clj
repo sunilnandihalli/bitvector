@@ -38,12 +38,20 @@
   (thrush-with-sym [x] hash-funcs (mapcat (fn [[hf-id hf]] ((bv-hash-buckets hf-id) (hf (bit-vectors id)))) x)
     (distinct x) (filter #(not= % id) x)))
 
+
 (defn all-probable-edges [{:keys [bv-hash-buckets] :as bv-stuff}]
-  (mapcat #(comb/combinations % 2) (mapcat vals (vals bv-hash-buckets))))
-
-(defn probable-links-to [{:keys [bv-hash-buckets hash-funcs] :as bv-stuff} id]
-  (map vector (repeat id) (probable-nearest-bv-ids bv-stuff id)))
-
+  (let [inc-or-init #(if % (inc %) 1)]
+    (loop [[[_ cur-hash-buckets] & rest-of-hash-buckets :as all-remaining-hash-buckets] bv-hash-buckets
+           [[_ cur-bucket-nodes] & rest-of-hash-buckets-of-nodes :as w] nil
+           pb-edges (transient {})]
+      (cond
+       cur-bucket-nodes (recur all-remaining-hash-buckets rest-of-hash-buckets-of-nodes
+                               (loop [[e & rest-of-es] (comb/combinations cur-bucket-nodes 2) pb-edges pb-edges]
+                                 (if-not e pb-edges
+                                         (recur rest-of-es (non-std-update! pb-edges (set e) inc-or-init)))))
+       cur-hash-buckets (recur rest-of-hash-buckets nil pb-edges)
+       :else (persistent! pb-edges)))))
+                        
 (defn bit-dist [{memory :distance-memory bit-vectors :bit-vectors} [i j]]
   (prf/prof :bit-dist (let [bit-dist-help (fn [a b]
                                             (loop [[fa & ra] a [fb & rb] b d 0]
@@ -52,11 +60,6 @@
                                                        (let [v (bit-dist-help (bit-vectors i) (bit-vectors j))]
                                                          (swap! memory #(assoc % [i j] v)) v)))]                   
                         (cond (= i j) 0 (> i j) (get-dist i j) :else (get-dist j i)))))
-
-
-(defn split-nodes-at-bit [{:keys [bit-vectors] :as bv-stuff} s bit-n] (vals (group-by (fn [[_ bv]] [bit-n (aget bv bit-n)]) s)))
-(defn split-edges-at-bit [bit-id s1 s2 edge-coll] (group-by (fn [[i j]] (cond (every? s1 [i j]) [bit-id 1] (every? s2 [i j]) [bit-id 2] :else [bit-id 1 2])) edge-coll))
-(defn min-edge [bv-stuff edge-coll] (if (seq edge-coll) (apply min-key #(bit-dist bv-stuff %) edge-coll)))
 
 
 (defn probable-graph [{:keys [bv-hash-buckets] :as bv-stuff}]
@@ -69,7 +72,7 @@
   (let [{:keys [opt-root-id log-num-ways]} (tr/most-probable-root-for-a-given-tree gr)
         log-parent-child-probability (reduce + (map (fn [[i j]]
                                                       (let [dist (bit-dist bv-stuff [i j])]
-                                                        (log-probability-of-bv dist count))) (tr/edges-in-prufer-order gr)))
+                                                        (log-probability-of-bv dist count))) (prf/prof :edges-in-prufer-order (tr/edges-in-prufer-order gr))))
         total-quality (log-mult log-num-ways log-parent-child-probability)]
     (self-keyed-map log-num-ways log-parent-child-probability total-quality opt-root-id))) 
 
@@ -83,7 +86,8 @@
   (let [graph-rep (prf/prof :probable-graph (probable-graph bv-stuff))
         is-graph-connected (prf/prof :is-graph-connected (tr/is-graph-connected graph-rep))
         minimum-spanning-free-tree (prf/prof :mst-prim (tr/mst-prim graph-rep (fnd [x] (bit-dist bv-stuff x))))
-        {:keys [log-num-ways log-parent-child-probability total-quality opt-root-id] :as new-sol-quality} (prf/prof :optimize-root-id (optimize-root-id bv-stuff minimum-spanning-free-tree))
+        {:keys [log-num-ways log-parent-child-probability total-quality opt-root-id] :as new-sol-quality}
+        (prf/prof :optimize-root-id (optimize-root-id bv-stuff minimum-spanning-free-tree))
         genealogy (prf/prof :rooted-acyclic-graph-to-genealogy (tr/rooted-acyclic-graph-to-genealogy [minimum-spanning-free-tree opt-root-id]))] genealogy))
            
 (defn calc-hashes-and-hash-fns [{:keys [bit-vectors] cnt :count :as bv-stuff} & {:keys [approximation-factor theta-const hash-length number-of-hashes]
@@ -129,11 +133,19 @@
 
 (defn solve
   ([fname out-fname]
-     (let [bv-stuff (thrush-with-sym [x] (prf/prof :read (read-bit-vectors fname))
-                      (prf/prof :calc-hashes-on-input-bitvectors (calc-hashes-and-hash-fns x :approximation-factor 4)))
+     (let [bv (prf/prof :read (read-bit-vectors fname))
+           bv-stuff (prf/prof :calc-hashes (calc-hashes-and-hash-fns bv :approximation-factor 4))
            genealogy (prf/prof :find-good-tree (find-good-tree bv-stuff))]
-       (save-local-variables)
        (write-genealogy  genealogy out-fname)))
   ([out-fname] (let [bv-stuff (-> (generate-input-problem 10) (calc-hashes-and-hash-fns :approximation-factor 4))]
                  (write-genealogy (find-good-tree bv-stuff) out-fname)))
   ([] (solve "parents.out")))
+
+
+(defn hello2 [& is]
+  (apply + is))
+
+(defn hello1 []
+  (prf/prof :hello (apply hello2 (range 1000))))
+
+#_(prf/profile (hello1))

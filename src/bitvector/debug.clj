@@ -24,6 +24,11 @@
                                      `(vector ~(-> (gensym "key-") name keyword) (with-meta ~x {:s-exp '~x}))))
                            vals)))) 
 
+(defn non-std-update! [tr-mp key f]
+  (let [x (tr-mp key)
+        fx (f x)]
+    (assoc! tr-mp key fx)))
+
 #_(self-keyed-map s z)
 
 (defmacro fnd [& rest]
