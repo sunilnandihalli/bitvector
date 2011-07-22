@@ -84,10 +84,10 @@
                   (if (some cur-mst edge)
                     (recur rest-of-mst-coll (conj trees-with-edge-connection cur-mst) trees-without-edge-connection)
                     (recur rest-of-mst-coll trees-with-edge-connection (conj trees-without-edge-connection cur-mst)))))]
-    (conj trees-without-edge-connection
-          (add-edge-to-graph
-           (case (count trees-with-edge-connection)
-                 0 (transient {}) 1 tr1 2 (not-std-into! tr1 tr2)) [s e]))))
+    (thrush-with-sym [x] (count trees-with-edge-connection)
+      (case x 0 (transient {}) 1 tr1 2 (not-std-into! tr1 tr2))
+      (add-edge-to-graph x [s e])
+      (conj trees-without-edge-connection x))))
     
 (defn mst-prim-edges [edges f disjoint-transient-mst-coll] ; mst is also used to check as to which nodes are already present in the current estimate of the MST
   (let [all-potential-edges (thrush-with-sym [x] edges
@@ -105,7 +105,7 @@
 (defn mst-prim-with-priority-edges [{cnt :count :as bv-stuff} probable-edge-map]
   (let [pb-edg-map (ensure-sortedness probable-edge-map)]
     (loop [[[_ cur-equal-priority-edge-set] & remaining-priority-edge-set-pairs] pb-edg-map
-           cur-mst (transient {})
+           cur-mst 
            cur-nods-not-in-mst (transient (set (range cnt)))]
       
 (defn-memoized log-probability-of-bv [r n]
