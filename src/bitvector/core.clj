@@ -76,33 +76,34 @@
       (non-std-update! start #(if % (conj! % end) (transient #{end})))
       (non-std-update! end #(if % (conj! % start) (transient #{start})))))
 
-(defn update-disjoint-transient-mst-coll [[disjoint-transient-mst-coll nodes-not-in-any-mst] [s e :as edge]]
-  (let [[[tr1 tr2 :as trees-with-edge-connection] trees-without-edge-connection]
-        (loop [[cur-mst & rest-of-mst-coll :as all-remaining-msts] cur-disjoint-transient-mst-coll
-               trees-with-edge-connection nil trees-without-edge-connection nil]
-          (if-not cur-mst [trees-with-edge-connection trees-without-edge-connection]
-                  (if (some cur-mst edge)
-                    (recur rest-of-mst-coll (conj trees-with-edge-connection cur-mst) trees-without-edge-connection)
-                    (recur rest-of-mst-coll trees-with-edge-connection (conj trees-without-edge-connection cur-mst)))))]
-    [(thrush-with-sym [x] (count trees-with-edge-connection)
-       (case x 0 (transient {}) 1 tr1 2 (non-std-into! tr1 tr2))
-       (add-edge-to-graph x1 [s e])
-       (conj trees-without-edge-connection x1))
+(defn update-disjoint-transient-mst-coll [disjoint-transient-mst-coll transient-nodes-to-mst-id-map [s e :as edge]]
+  (let [tree-ids (keep transient-nodes-to-mst-id-map edge)
+        [tr1 tr2] (map disjoint-transient-mst-coll tree-ids)
+        new-transient-tree (thrush-with-sym [x] (count tree-ids)
+                             (case x 0 (transient {}) 1 tr1 2 (non-std-into! tr1 tr2))
+                             (add-edge-to-graph x [s e]))
+        new-tree-id (if-not (seq tree-ids) (inc (ffirst (rseq disjoint-transient-mst-coll))) (first tree-ids))
+        new-disjoint-transient-mst-coll (thrush-with-sym [x] disjoint-transient-mst-coll
+                                          (reduce dissoc x tree-ids) (assoc x new-tree-id new-transient-tree))
+        new-transient-nodes-to-mst-id-map (reduce #(non-std-update! %1 %2 (constantly new-tree-id)) transient-nodes-to-mst-id-map 
      (reduce #(non-std-update! %1 (fn [s] (disj! s %2))) nodes-not-in-any-mst [s e])]))
     
-(defn mst-prim-edges [edges f [disjoint-transient-mst-coll nodes-not-in-any-mst]]
+(defn mst-prim-edges [edges f disjoint-transient-mst-coll transient-nodes-to-mst-id-map]
   ;; mst is also used to check as to which nodes are already present in the current estimate of the MST
   (let [all-potential-edges (thrush-with-sym [x] edges
-                              (filter (fn [edge] (not-any? #(every? % edge) disjoint-transient-mst-coll)) x)
+                              (filter #(apply not= (map transient-nodes-to-mst-id-map %)) x)
                               (map (fn [[& cur-edge]] [(f cur-edge) (list cur-edge)]) x)
                               (merge-with (sorted-map) into x))]
     (loop [cur-disjoint-transient-mst-coll disjoint-transient-mst-coll
            [[cur-dist cur-dist-edge-set :as cur-dist-edge-set-pair] & rest-of-dist-edge-set-pairs :as all-dist-edge-set-pairs] (seq all-potential-edges)
-           [cur-dist-edge & rest-of-cur-dist-edges] nil]
+           [cur-dist-edge & rest-of-cur-dist-edges] nil
+           cur-transient-nodes-to-mst-id-map transient-nodes-to-mst-id-map]
       (cond
-       cur-dist-edge (recur (update-disjoint-transient-mst-set cur-disjoint-transient-mst-coll) all-dist-edge-set-pairs rest-of-cur-dist-edges)
-       cur-dist-edge-set-pair (recur cur-disjoint-transient-mst-coll rest-of-dist-edge-set-pairs (seq cur-dist-edge-set))
-       :else cur-disjoint-transient-mst-coll))))
+       cur-dist-edge (let [[new-disjoint-transient-mst-coll new-transient-nodes-to-mst-id-map]
+                           (update-disjoint-transient-mst-set cur-disjoint-transient-mst-coll cur-transient-nodes-to-mst-id-map cur-dist-edge)]
+                       (recur new-disjoint-transient-mst-coll all-dist-edge-set-pairs rest-of-cur-dist-edges new-transient-nodes-to-mst-id-map))
+       cur-dist-edge-set-pair (recur cur-disjoint-transient-mst-coll rest-of-dist-edge-set-pairs (seq cur-dist-edge-set) cur-transient-nodes-to-mst-id-map)
+       :else [cur-disjoint-transient-mst-coll cur-transient-nodes-to-mst-id-map]))))
       
 (defn mst-prim-with-priority-edges [{cnt :count :as bv-stuff} probable-edge-map]
   (let [pb-edg-map (ensure-sortedness probable-edge-map)]
