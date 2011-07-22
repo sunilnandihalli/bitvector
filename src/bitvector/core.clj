@@ -71,6 +71,30 @@
               (assoc persistent-sorted-map n-hash-collisions (persistent! transient-edge-set)))
             (sorted-map) (persistent! trnsnt-n-collisions-2-trnsnt-edgset-map))))    
 
+(defn add-edge-to-graph [transient-mst [start end]]
+  (-> transient-mst
+      (non-std-update! start #(if % (conj! % end) (transient #{end})))
+      (non-std-update! end #(if % (conj! % start) (transient #{start})))))
+
+(defn update-disjoint-transient-mst-coll [disjoint-transient-mst-set edge]
+  (loop [[cur-mst & rest-of-msts] cur-disjoint-transient-mst-coll]))
+
+(defn mst-prim-edges [edges f disjoint-transient-mst-coll] ; mst is also used to check as to which nodes are already present in the current estimate of the MST
+  (let [all-potential-edges (thrush-with-sym [x] edges
+                              (filter (fn [edge] (not-any? #(every? % edge) disjoint-transient-mst-coll)) x)
+                              (map (fn [[& cur-edge]] [(f cur-edge) (list cur-edge)]) x)
+                              (merge-with (sorted-map) into x))]
+    (loop [cur-disjoint-transient-mst-coll disjoint-transient-mst-coll
+           [[cur-dist cur-dist-edge-set :as cur-dist-edge-set-pair] & rest-of-dist-edge-set-pairs :as all-dist-edge-set-pairs] (seq all-potential-edges)
+           [cur-dist-edge & rest-of-cur-dist-edges] nil]
+      (cond
+       cur-dist-edge (recur (update-disjoint-transient-mst-set cur-disjoint-transient-mst-coll) all-dist-edge-set-pairs rest-of-cur-dist-edges)
+       cur-dist-edge-set-pair (recur cur-disjoint-transient-mst-coll rest-of-dist-edge-set-pairs (seq cur-dist-edge-set))
+       :else cur-disjoint-transient-mst-coll))))
+      
+    
+    
+    
 
 (defn mst-prim-with-priority-edges [{cnt :count :as bv-stuff} probable-edge-map]
   (let [pb-edg-map (ensure-sortedness probable-edge-map)]

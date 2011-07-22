@@ -29,6 +29,10 @@
         fx (f x)]
     (assoc! tr-mp key fx)))
 
+(defn non-std-into! [tr-mp1 tr-mp2]
+  (let [mp2 (persistent! tr-mp2)]
+    (reduce #(conj! %1 %2) tr-mp1 mp2)))
+
 (defn ensure-sortedness [coll]
   (cond
    (sorted? coll) coll

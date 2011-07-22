@@ -55,12 +55,6 @@
 (defn edges-to-graph [es]
   (reduce (fn [ftr [i j]] (-> ftr (update-in [i] #(if % (into % [j]) #{j})) (update-in [j] #(if % (into % [i]) #{i})))) {} es))
 
-(defn mst-prim-edges [edges f]
-  (let [all-potential-edges (thrush-with-sym [x] edges
-                              (map (fn [[& cur-edge]] [(f cur-edge) (list cur-edge)]) x)
-                              (merge-with (sorted-map) into x))]
-    
-
 (defn mst-prim [graph f]
   (let [[start neighbours] (first graph)]
     (-> (loop [nodes-in-ftr #{start} edges-in-ftr []
