@@ -76,9 +76,19 @@
       (non-std-update! start #(if % (conj! % end) (transient #{end})))
       (non-std-update! end #(if % (conj! % start) (transient #{start})))))
 
-(defn update-disjoint-transient-mst-coll [disjoint-transient-mst-set edge]
-  (loop [[cur-mst & rest-of-msts] cur-disjoint-transient-mst-coll]))
-
+(defn update-disjoint-transient-mst-coll [disjoint-transient-mst-coll [s e :as edge]]
+  (let [[[tr1 tr2 :as trees-with-edge-connection] trees-without-edge-connection]
+        (loop [[cur-mst & rest-of-mst-coll :as all-remaining-msts] cur-disjoint-transient-mst-coll
+               trees-with-edge-connection nil trees-without-edge-connection nil]
+          (if-not cur-mst [trees-with-edge-connection trees-without-edge-connection]
+                  (if (some cur-mst edge)
+                    (recur rest-of-mst-coll (conj trees-with-edge-connection cur-mst) trees-without-edge-connection)
+                    (recur rest-of-mst-coll trees-with-edge-connection (conj trees-without-edge-connection cur-mst)))))]
+    (conj trees-without-edge-connection
+          (add-edge-to-graph
+           (case (count trees-with-edge-connection)
+                 0 (transient {}) 1 tr1 2 (not-std-into! tr1 tr2)) [s e]))))
+    
 (defn mst-prim-edges [edges f disjoint-transient-mst-coll] ; mst is also used to check as to which nodes are already present in the current estimate of the MST
   (let [all-potential-edges (thrush-with-sym [x] edges
                               (filter (fn [edge] (not-any? #(every? % edge) disjoint-transient-mst-coll)) x)
@@ -92,10 +102,6 @@
        cur-dist-edge-set-pair (recur cur-disjoint-transient-mst-coll rest-of-dist-edge-set-pairs (seq cur-dist-edge-set))
        :else cur-disjoint-transient-mst-coll))))
       
-    
-    
-    
-
 (defn mst-prim-with-priority-edges [{cnt :count :as bv-stuff} probable-edge-map]
   (let [pb-edg-map (ensure-sortedness probable-edge-map)]
     (loop [[[_ cur-equal-priority-edge-set] & remaining-priority-edge-set-pairs] pb-edg-map
