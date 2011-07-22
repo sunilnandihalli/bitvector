@@ -38,7 +38,6 @@
   (thrush-with-sym [x] hash-funcs (mapcat (fn [[hf-id hf]] ((bv-hash-buckets hf-id) (hf (bit-vectors id)))) x)
     (distinct x) (filter #(not= % id) x)))
 
-
 (defn all-probable-edges [{:keys [bv-hash-buckets] :as bv-stuff}]
   (let [inc-or-init #(if % (inc %) 1)]
     (loop [[[_ cur-hash-buckets] & rest-of-hash-buckets :as all-remaining-hash-buckets] bv-hash-buckets
