@@ -60,10 +60,24 @@
                                                          (swap! memory #(assoc % [i j] v)) v)))]                   
                         (cond (= i j) 0 (> i j) (get-dist i j) :else (get-dist j i)))))
 
+(defn map-of-probable-edges [{:keys [bv-hash-buckets] :as bv-stuff}]
+  (let [probable-edges (all-probable-edges bv-stuff)
+        trnsnt-n-collisions-2-trnsnt-edgset-map (loop [[[edge n-hash-collisions :as edge-pair] & rest-of-edge-collision-pairs] probable-edges
+                                                       n-collision-edges-map (transient {})]
+                                                  (if-not edge-pair n-collision-edges-map
+                                                          (recur rest-of-edge-collision-pairs
+                                                                 (non-std-update! n-collision-edges-map n-hash-collisions #(if % (conj! % edge) (transient #{edge}))))))]
+    (reduce (fn [persistent-sorted-map [n-hash-collisions transient-edge-set]]
+              (assoc persistent-sorted-map n-hash-collisions (persistent! transient-edge-set)))
+            (sorted-map) (persistent! trnsnt-n-collisions-2-trnsnt-edgset-map))))    
 
-(defn probable-graph [{:keys [bv-hash-buckets] :as bv-stuff}]
-  (-> bv-stuff all-probable-edges tr/edges-to-graph))
-                  
+
+(defn mst-prim-with-priority-edges [{cnt :count :as bv-stuff} probable-edge-map]
+  (let [pb-edg-map (ensure-sortedness probable-edge-map)]
+    (loop [[[_ cur-equal-priority-edge-set] & remaining-priority-edge-set-pairs] pb-edg-map
+           cur-mst (transient {})
+           cur-nods-not-in-mst (transient (set (range cnt)))]
+      
 (defn-memoized log-probability-of-bv [r n]
   (log-mult (log-pow log-p r) (log-pow log-1-p (- n r))))
 

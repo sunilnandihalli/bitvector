@@ -29,6 +29,14 @@
         fx (f x)]
     (assoc! tr-mp key fx)))
 
+(defn ensure-sortedness [coll]
+  (cond
+   (sorted? coll) coll
+   (map? coll) (into (sorted-map) coll)
+   (coll? coll) (into (sorted-set) coll)
+   :else (throw (Exception. "not a collection"))))
+   
+
 #_(self-keyed-map s z)
 
 (defmacro fnd [& rest]

@@ -55,9 +55,14 @@
 (defn edges-to-graph [es]
   (reduce (fn [ftr [i j]] (-> ftr (update-in [i] #(if % (into % [j]) #{j})) (update-in [j] #(if % (into % [i]) #{i})))) {} es))
 
-(defn mst-prim [graph untimed-f]
-  (let [f #(prf/prof :bit-dist-mst-prim (untimed-f %))
-        [start neighbours] (first graph)]
+(defn mst-prim-edges [edges f]
+  (let [all-potential-edges (thrush-with-sym [x] edges
+                              (map (fn [[& cur-edge]] [(f cur-edge) (list cur-edge)]) x)
+                              (merge-with (sorted-map) into x))]
+    
+
+(defn mst-prim [graph f]
+  (let [[start neighbours] (first graph)]
     (-> (loop [nodes-in-ftr #{start} edges-in-ftr []
                all-potential-edges (into (sorted-map) (map (comp (juxt f identity) #(vector start %)) neighbours))]
           (if-not (seq all-potential-edges) edges-in-ftr
