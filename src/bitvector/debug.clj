@@ -22,9 +22,9 @@
   `(into {} (vector ~@(map (fn [x] (if (symbol? x)
                                      `(vector ~(-> x name keyword)  ~x)
                                      `(vector ~(-> (gensym "key-") name keyword) (with-meta ~x {:s-exp '~x}))))
-                           vals))))
+                           vals))))  
 
-  
+(defn inc-or-init [x] (if x (inc x) 1))
 
 (defn non-std-update! [tr-mp key f]
   (let [x (tr-mp key)
@@ -35,9 +35,10 @@
   (let [mp2 (persistent! tr-mp2)]
     (reduce #(conj! %1 %2) tr-mp1 mp2)))
 
-(defmacro display [& forms]
-  `(inspect-tree (self-keyed-map ~@forms)))
 
+(defmacro display
+  ([& forms]
+     `(inspect-tree (self-keyed-map ~@forms))))
 (defn ensure-sortedness [coll]
   (cond
    (sorted? coll) coll
