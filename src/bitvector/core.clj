@@ -108,11 +108,14 @@
       
 (defn mst-prim-with-priority-edges [{cnt :count :as bv-stuff} probable-edge-map]
   (let [pb-edg-map (ensure-sortedness probable-edge-map)
-        edge-cost #(bit-dist bv-stuff %)]
-    (loop [[[_ cur-equal-priority-edge-set :as edge-set-pairs-available] & remaining-priority-edge-set-pairs] (seq pb-edg-map)
-           cur-mst {:disjoint-mst-coll {} :nodes-to-mst-id-map {}}]
-      (if-not edge-set-pairs-available cur-mst
-        (recur remaining-priority-edge-set-pairs (mst-prim-edges cur-equal-priority-edge-set edge-cost cur-mst))))))
+        edge-cost #(bit-dist bv-stuff %)
+        {:keys [disjoint-mst-coll nodes-to-mst-id-map] :as mst}
+        (loop [[[_ cur-equal-priority-edge-set :as edge-set-pairs-available] & remaining-priority-edge-set-pairs] (seq pb-edg-map)
+               cur-mst {:disjoint-mst-coll {} :nodes-to-mst-id-map {}}]
+          (if-not edge-set-pairs-available cur-mst
+                  (recur remaining-priority-edge-set-pairs (mst-prim-edges cur-equal-priority-edge-set edge-cost cur-mst))))]
+    (if (= 1 (count disjoint-mst-coll)) (second (first disjoint-mst-coll))
+        (do (inspect-tree mst) (throw (Exception. "disjoint-pieces-found-in-mst"))))))
       
 (defn-memoized log-probability-of-bv [r n]
   (log-mult (log-pow log-p r) (log-pow log-1-p (- n r))))
@@ -133,7 +136,7 @@
 
 (defn find-good-tree [{cnt :count :as bv-stuff} & {:keys [n-iterations] :or {n-iterations 100}}]
   (let [probable-edges (map-of-probable-edges bv-stuff)
-        minimum-spanning-free-tree (mst-prim-with-priority-edges bv-stuff probable-edges)
+        {minimum-spanning-free-tree :disjoint-mst-coll} (mst-prim-with-priority-edges bv-stuff probable-edges)
         {:keys [log-num-ways log-parent-child-probability total-quality opt-root-id] :as new-sol-quality} (optimize-root-id bv-stuff minimum-spanning-free-tree)
         genealogy (tr/rooted-acyclic-graph-to-genealogy [minimum-spanning-free-tree opt-root-id])] genealogy))
            
