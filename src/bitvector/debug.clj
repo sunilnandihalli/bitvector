@@ -4,7 +4,7 @@
 	    [clojure.walk :as w]
 	    [clojure.contrib.trace :as t]
             [clojure.contrib.lazy-seqs :as ls])
-  (:use iterate))
+  (:use iterate clojure.inspector))
 
 #_(see (make-array Double/TYPE 3 2))
 #_(clojure.pprint/pprint
@@ -22,7 +22,9 @@
   `(into {} (vector ~@(map (fn [x] (if (symbol? x)
                                      `(vector ~(-> x name keyword)  ~x)
                                      `(vector ~(-> (gensym "key-") name keyword) (with-meta ~x {:s-exp '~x}))))
-                           vals)))) 
+                           vals))))
+
+  
 
 (defn non-std-update! [tr-mp key f]
   (let [x (tr-mp key)
@@ -32,6 +34,9 @@
 (defn non-std-into! [tr-mp1 tr-mp2]
   (let [mp2 (persistent! tr-mp2)]
     (reduce #(conj! %1 %2) tr-mp1 mp2)))
+
+(defmacro display [& forms]
+  `(inspect-tree (self-keyed-map ~@forms)))
 
 (defn ensure-sortedness [coll]
   (cond

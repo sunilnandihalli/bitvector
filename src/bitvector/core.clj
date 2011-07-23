@@ -39,6 +39,7 @@
     (distinct x) (filter #(not= % id) x)))
 
 (defn all-probable-edges [{:keys [bv-hash-buckets] :as bv-stuff}]
+  (display bv-stuff)
   (let [inc-or-init #(if % (inc %) 1)]
     (loop [[[_ cur-hash-buckets] & rest-of-hash-buckets :as all-remaining-hash-buckets] (seq bv-hash-buckets)
            [[_ cur-bucket-nodes] & rest-of-hash-buckets-of-nodes :as w] nil
@@ -110,12 +111,13 @@
   (let [pb-edg-map (ensure-sortedness probable-edge-map)
         edge-cost #(bit-dist bv-stuff %)
         {:keys [disjoint-mst-coll nodes-to-mst-id-map] :as mst}
-        (loop [[[_ cur-equal-priority-edge-set :as edge-set-pairs-available] & remaining-priority-edge-set-pairs] (seq pb-edg-map)
+        (loop [[[cur-edge-priority cur-equal-priority-edge-set :as edge-set-pairs-available] & remaining-priority-edge-set-pairs] (seq pb-edg-map)
                cur-mst {:disjoint-mst-coll {} :nodes-to-mst-id-map {}}]
+          (display cur-edge-priority cur-mst)
           (if-not edge-set-pairs-available cur-mst
                   (recur remaining-priority-edge-set-pairs (mst-prim-edges cur-equal-priority-edge-set edge-cost cur-mst))))]
     (if (= 1 (count disjoint-mst-coll)) (second (first disjoint-mst-coll))
-        (do (inspect-tree mst) (throw (Exception. "disjoint-pieces-found-in-mst"))))))
+        (do (display mst) (throw (Exception. "disjoint-pieces-found-in-mst"))))))
       
 (defn-memoized log-probability-of-bv [r n]
   (log-mult (log-pow log-p r) (log-pow log-1-p (- n r))))
@@ -136,6 +138,7 @@
 
 (defn find-good-tree [{cnt :count :as bv-stuff} & {:keys [n-iterations] :or {n-iterations 100}}]
   (let [probable-edges (map-of-probable-edges bv-stuff)
+        _ (display probable-edges)
         {minimum-spanning-free-tree :disjoint-mst-coll} (mst-prim-with-priority-edges bv-stuff probable-edges)
         {:keys [log-num-ways log-parent-child-probability total-quality opt-root-id] :as new-sol-quality} (optimize-root-id bv-stuff minimum-spanning-free-tree)
         genealogy (tr/rooted-acyclic-graph-to-genealogy [minimum-spanning-free-tree opt-root-id])] genealogy))
