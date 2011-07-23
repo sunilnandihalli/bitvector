@@ -40,7 +40,7 @@
 
 (defn all-probable-edges [{:keys [bv-hash-buckets] :as bv-stuff}]
   (let [inc-or-init #(if % (inc %) 1)]
-    (loop [[[_ cur-hash-buckets] & rest-of-hash-buckets :as all-remaining-hash-buckets] bv-hash-buckets
+    (loop [[[_ cur-hash-buckets] & rest-of-hash-buckets :as all-remaining-hash-buckets] (seq bv-hash-buckets)
            [[_ cur-bucket-nodes] & rest-of-hash-buckets-of-nodes :as w] nil
            pb-edges (transient {})]
       (cond
@@ -62,7 +62,7 @@
 
 (defn map-of-probable-edges [{:keys [bv-hash-buckets] :as bv-stuff}]
   (let [probable-edges (all-probable-edges bv-stuff)
-        trnsnt-n-collisions-2-trnsnt-edgset-map (loop [[[edge n-hash-collisions :as edge-pair] & rest-of-edge-collision-pairs] probable-edges
+        trnsnt-n-collisions-2-trnsnt-edgset-map (loop [[[edge n-hash-collisions :as edge-pair] & rest-of-edge-collision-pairs] (seq probable-edges)
                                                        n-collision-edges-map (transient {})]
                                                   (if-not edge-pair n-collision-edges-map
                                                           (recur rest-of-edge-collision-pairs
@@ -74,7 +74,7 @@
 (defn add-edge-to-graph [mst [start end]]
   (-> mst (update-in [start] #(if % (conj % end) #{end})) (update-in [end] #(if % (conj % start) #{start}))))
 
-(defn update-disjoint-mst-coll [[disjoint-mst-coll nodes-to-mst-id-map] [s e :as edge]]
+(defn update-disjoint-mst-coll [{:keys [disjoint-mst-coll nodes-to-mst-id-map] :as mst} [s e :as edge]]
   (let [[tr-id1 tr-id2 :as tree-ids] (keep nodes-to-mst-id-map edge)
         [tr1 tr2] (map disjoint-mst-coll tree-ids)
         n-tr-ids (count tree-ids)
@@ -90,28 +90,29 @@
                                   (condp = new-tree-id ;; can simplify .. written this way for performance...
                                       tr-id1 (reduce assign-new-tree-id x (keys tr2))
                                       tr-id2 (reduce assign-new-tree-id x (keys tr1)) x))]
-    [disjoint-mst-coll nodes-to-mst-id-map]))     
+    {:disjoint-mst-coll new-disjoint-mst-coll :nodes-to-mst-id-map new-nodes-to-mst-id-map}))     
     
-(defn mst-prim-edges [edges f [disjoint-mst-coll nodes-to-mst-id-map]]
+(defn mst-prim-edges [edges f {:keys [nodes-to-mst-id-map] :as mst}]
   ;; mst is also used to check as to which nodes are already present in the current estimate of the MST
   (let [all-potential-edges (thrush-with-sym [x] edges
                               (filter #(let [[tr-id1 tr-id2] (map nodes-to-mst-id-map %)]
                                          (or (not (and tr-id1 tr-id2)) (not= tr-id1 tr-id2)))  x)
                               (map (fn [[& cur-edge]] [(f cur-edge) (list cur-edge)]) x)
-                              (merge-with (sorted-map) into x))]
+                              (merge-with into (sorted-map) x))]
     (loop [[[cur-dist cur-dist-edge-set :as cur-dist-edge-set-pair] & rest-of-dist-edge-set-pairs :as all-dist-edge-set-pairs] (seq all-potential-edges)
-           [cur-dist-edge & rest-of-cur-dist-edges] nil
-           [cur-disjoint-mst-coll cur-nodes-to-mst-id-map] [disjoint-mst-coll nodes-to-mst-id-map]]
+           [cur-dist-edge & rest-of-cur-dist-edges] nil cur-mst mst]
       (cond
-       cur-dist-edge (recur all-dist-edge-set-pairs rest-of-cur-dist-edges (update-disjoint-mst-coll [cur-disjoint-mst-coll cur-nodes-to-mst-id-map] cur-dist-edge))
-       cur-dist-edge-set-pair (recur rest-of-dist-edge-set-pairs (seq cur-dist-edge-set) [cur-disjoint-mst-coll cur-nodes-to-mst-id-map])
-       :else [cur-disjoint-mst-coll cur-nodes-to-mst-id-map]))))
+       cur-dist-edge (recur all-dist-edge-set-pairs rest-of-cur-dist-edges (update-disjoint-mst-coll cur-mst cur-dist-edge))
+       cur-dist-edge-set-pair (recur rest-of-dist-edge-set-pairs (seq cur-dist-edge-set) cur-mst)
+       :else cur-mst))))
       
 (defn mst-prim-with-priority-edges [{cnt :count :as bv-stuff} probable-edge-map]
   (let [pb-edg-map (ensure-sortedness probable-edge-map)
         edge-cost #(bit-dist bv-stuff %)]
-    (loop [[[_ cur-equal-priority-edge-set] & remaining-priority-edge-set-pairs] pb-edg-map [cur-disjoint-mst-coll cur-nodes-to-mst-id-map] [{} {}]]
-      (recur remaining-priority-edge-set-pairs (mst-prim-edges cur-equal-priority-edge-set edge-cost [cur-disjoint-mst-coll cur-nodes-to-mst-id-map])))))
+    (loop [[[_ cur-equal-priority-edge-set :as edge-set-pairs-available] & remaining-priority-edge-set-pairs] (seq pb-edg-map)
+           cur-mst {:disjoint-mst-coll {} :nodes-to-mst-id-map {}}]
+      (if-not edge-set-pairs-available cur-mst
+        (recur remaining-priority-edge-set-pairs (mst-prim-edges cur-equal-priority-edge-set edge-cost cur-mst))))))
       
 (defn-memoized log-probability-of-bv [r n]
   (log-mult (log-pow log-p r) (log-pow log-1-p (- n r))))
@@ -132,7 +133,7 @@
 
 (defn find-good-tree [{cnt :count :as bv-stuff} & {:keys [n-iterations] :or {n-iterations 100}}]
   (let [probable-edges (map-of-probable-edges bv-stuff)
-        minimum-spanning-free-tree (mst-prim-with-priority-edges probable-edges)
+        minimum-spanning-free-tree (mst-prim-with-priority-edges bv-stuff probable-edges)
         {:keys [log-num-ways log-parent-child-probability total-quality opt-root-id] :as new-sol-quality} (optimize-root-id bv-stuff minimum-spanning-free-tree)
         genealogy (tr/rooted-acyclic-graph-to-genealogy [minimum-spanning-free-tree opt-root-id])] genealogy))
            
