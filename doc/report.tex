@@ -2,22 +2,33 @@
 
 \newcommand{\piRsquare}{\pi r^2}		% This is my own macro !!!
 
-\title{My Sample \LaTeX{} Document}			% used by \maketitle
-\author{\L\"{a}rs  Schl{\oe}ff\d{o}ng\"{e}n, }		% used by \maketitle
-\date{July 14, 2005}					% used by \maketitle
+\title{Bitvector genealogy}			% used by \maketitle
+\author{Sunil S Nandihalli }		% used by \maketitle
+\date{July 24, 2011}					% used by \maketitle
 
 \begin{document}
 \maketitle						% automatic title!
 
-I typed this file with a plain text editor.
-(I used \textbf{pico} and \textbf{emacs}.)
-End
-	of
-		paragraph.
+\section{Problem statement}
 
-This is my second paragraph.
-The area of a circle is $\pi r^2$; again, that is $\piRsquare$.
-My score on the last exam\footnote{May 23} was $95 \pm 5$.
+The BitVectors are an ancient and immortal race of 10,000, each with a 10,000 bit genome. The race evolved from a single individual by the following process: 9,999 times a BitVector chosen at random from amongst the population was cloned using an error-prone process that considers each bit independently, and flips it with 0.2 probability.
+
+Write a program to guess the reproductive history of BitVectors from their genetic material. The randomly-ordered file bitvectors-genes.data.gz contains a 10,000 bit line for each individual. Your program's output should be, for each input line, the 0-based line number of that individual's parent, or -1 if it is the progenitor. Balance performance against probability of mistakes as you see fit.
+
+\section{Problem analysis}
+
+Firstly, any genealogy can be valid solution to the above problem. However, it may not be a highly probable genealogy, given the bit vectors and the procedure used to used to clone them. So, the problem at hand is to find a highly probable genealogy for the set of bit vectors given to us. The problem can be treated as \emph{minimum spanning tree} problemwith every node being a bit vector and a link between nodes indicating a parent-child relationship. The weight of the edge is just equal to \emph{hamming distance} between the two bit vectors. The shorter the hamming distance, the higher the probability that there is a parent-child relationship between the nodes under consideration.
+
+\subsection{Probability of parent-child relationship}
+Let us say that there are two bit vectos $A$ and $B$, and they are $d$ hamming distance apart, with the length of the bitvector being $n$ and the probability of flipping the bit during the cloning process be $p$, then the probability that $A$ was the parent of $B$ is given by $p^r(1-p)^{n-r}$ . From this expression, it is clear that, smaller the hamming distance, higher is the probability there is parent child relationship among them. One of the key thing to note is that, just because the probability is $p$, the parent child need not be $n p$ bits apart to have a highly probable parent child relation ship. In fact, as long as $p$ is less than $0.5$, the closer the bit vectors are higher the probability of parent child relationship. However, if the $p$ exceeds $0.5$, then farther the bit vectors, the more probable will be their relationship. As you may have noticed, I have not mentioned as to who would be the parent and who would be the child. The reason for doing so is that both of them can be parent or child with equal probability. So, we can frame the problem as one of just calculating the minimum spanning tree as I mentioned before. However, this would still not resolve as to who was the parent or the child.
+\subsection{Identifying the root of the minimum spanning tree}
+As mentioned before, any genealogy can be true, it however may not be highly probable. Along the same lines, once the MST is calculated, any one of the nodes can be used as the root node, however, it may not lead to a highly probable genealogy to the given problem. Again to make the genealogy highly probable, we have to chose an appropriate root. This clearly implies that choice of root should maximize the number of ways in which cloning of a given pair of parent and child can happen, to increase the probability of the genealogy hence obtained.
+
+\section {Solution process}
+The solution process involves two things, first the calculation of the Minimum spanning tree and secondly finding the root of the tree which maximizes the number of ways it can be build the trees.
+\subsection{calculation of the minimum spanning tree}
+The problem at hand can be considered as the calculation of the minimum spanning tree where the $n$ nodes are present in $n$ dimensional space. Since, this is a very large dimensional problem, and the calcution of the distance can be very expensive. After solving a smaller problem by brute force, and extrapolating it to dimension of the current problem gave me an estimate of about 8 hrs, so this clearly needed an approximate solution. I have used \emph{locality sensitive hashing} proposed by 
+
 
 \section{Formulae; inline vs. displayed}
 
