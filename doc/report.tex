@@ -27,7 +27,32 @@ As mentioned before, any genealogy can be true, it however may not be highly pro
 \section {Solution process}
 The solution process involves two things, first the calculation of the Minimum spanning tree and secondly finding the root of the tree which maximizes the number of ways it can be build the trees.
 \subsection{calculation of the minimum spanning tree}
-The problem at hand can be considered as the calculation of the minimum spanning tree where the $n$ nodes are present in $n$ dimensional space. Since, this is a very large dimensional problem, and the calcution of the distance can be very expensive. After solving a smaller problem by brute force, and extrapolating it to dimension of the current problem gave me an estimate of about 8 hrs, so this clearly needed an approximate solution. I have used \emph{locality sensitive hashing} proposed by 
+The problem at hand can be considered as the calculation of the minimum spanning tree where the $n$ nodes are present in $n$ dimensional space. Since, this is a very large dimensional problem, and the calcution of the distance can be very expensive. After solving a smaller problem by brute force, and extrapolating it to dimension of the current problem gave me an estimate of about 8 hrs, so this clearly needed an approximate solution. I have used \emph{locality sensitive hashing} proposed by some of the work by Dr. Indyk Piotr. Locality sensitive hashing hashes nodes which hashes nodes close by to the same bucket with a high probability. Multiple such hashing functions are used. The edges that are formed by taking all combinations of two from any given bucket are considered as highly probable edges. The edges joining two points which collide in the most number of hashed buckets are considered very likely candidates. It is assumed that edges joining two points with larger number of collisions when hashed are always better than those points that collide in fewer hash buckets. This assumption can be false but will more likely be true and is taken for granted to make the problem more tractable. \\
+
+The hashing function used is described here. For any bit vector $x$ , $h(x)$ is defined as the binary number formed by taking the ${a_i}^{th}$ bit of $x$ for $i$ in $[0,k)$ . $L$ such hashing functions are chosen. Both, $k$ and $L$ determine the error involved in finding the best edge for our MST. For further details on how $k$ and $L$ were chosen please look at Indyk's publication. The probability of a given set of links in tree with $n$ nodes and $n-1$ links with corresponding distances being $d_i$ is given by $prob_{links}$ \\
+\begin{equation}
+  prob_{links} = \prod_{i_{link} = 0}^{n-1} p^{d_i}(1-p)^{(n-d_i)}
+\end{equation}
+
+\subsection{Finding the root id of the MST}
+As described before, in order to be able to find the most probable solution, we need to find the root id such that the number ways in which cloning can be done is maximized. The number of ways in which any tree can be created by cloning can be represented as a recursive expression. \\
+
+Let $P_T$ represent the number of ways tree $T$ can be created and $N_T$ represent the number of nodes in it. Let $T_c^i$ represent the $i^{th}$ child of tree $T$. Let $P_{T_c}^i$ represent the number of ways the children can be created and $N_{T_c}^i$ be the number of nodes in each of those trees. Let $N_c$ be the number of children of the given tree $T$. The recursive formula to evaluate the $P_T$ and $N_T$ are given by \\
+
+\begin{equation}
+  N_T = 1 + \sum_{i=0}^{N_c} N_{T_c}^i
+\end{equation}
+ The number of ways a given tree can be built is equal to the product of number of ways its child trees can be created multiplied by the number of ways in which $N_T-1$ positions can be grouped into $k$ groups of size $N_{T_c}^i$. 
+\begin{equation}
+  P_T = {\prod_{i=0}^{N_c} {P_{T_c}^i}} \left( \frac{(N_T - 1)!}{\prod_{i=0}^{N_c} {N_{T_c}^i}! } \right)
+\end{equation}
+
+\subsection{Calculating the quality of a given solution}
+ As discussed before, any viable solution is a correct solution, however may not be the most probable solution. So, we need to be able to calculate the probability of a given solution at hand. It is easy to see that probability of a given solution being the actual solution is proprotional to the product of the number of ways a given tree can be built with the product of the probabilities of all the links present in the current tree. This can be calculated as 
+\begin{eqnarray}
+ probability of current solution & = & P_T prob_{links}
+                                 & = & \left{ {\prod_{i=0}^{N_c} {P_{T_c}^i}} \left( \frac{(N_T - 1)!}{\prod_{i=0}^{N_c} {N_{T_c}^i}! } \right) \right} \prod_{i_{link} = 0}^{n-1} p^{d_i}(1-p)^{(n-d_i)}
+\end{eqnarray}
 
 
 \section{Formulae; inline vs. displayed}
@@ -35,7 +60,8 @@ The problem at hand can be considered as the calculation of the minimum spanning
 I insert an inline formula by surrounding it with a pair of
 single \$ symbols;  what is $x = 3 \times 5$?
 For a \emph{displayed} formula, use double-\$
-before and after --- include no blank lines!
+
+;/before and after --- include no blank lines!
 $$\mu^{\alpha+3} + (\alpha^{\beta}+\theta_{\gamma}+\delta+\zeta)$$
 
 \subsection{Numbered formulae}
