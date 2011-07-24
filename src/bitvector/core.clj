@@ -126,12 +126,12 @@
   (log-mult (log-pow log-p r) (log-pow log-1-p (- n r))))
 
 (defn optimize-root-id [{:keys [count bit-vectors] :as bv-stuff} gr]
-  (let [{:keys [opt-root-id log-num-ways]} (tr/most-probable-root-for-a-given-tree gr)
+  (let [{:keys [opt-root-id log-num-ways all-root-log-num-ways]} (tr/most-probable-root-for-a-given-tree gr)
         log-parent-child-probability (reduce + (map (fn [[i j]]
                                                       (let [dist (bit-dist bv-stuff [i j])]
                                                         (log-probability-of-bv dist count))) (prf/prof :edges-in-prufer-order (tr/edges-in-prufer-order gr))))
         total-quality (log-mult log-num-ways log-parent-child-probability)]
-    (self-keyed-map log-num-ways log-parent-child-probability total-quality opt-root-id))) 
+    (self-keyed-map log-num-ways log-parent-child-probability all-root-log-num-ways total-quality opt-root-id))) 
 
 (defn write-genealogy
   ([genealogy out-fname]
@@ -139,10 +139,22 @@
        (spit out-fname parents)))
   ([genealogy] (write-genealogy genealogy "parents.out")))
 
+(defn is-log-num-ways-monotonic-towards-the-optimum-root-id? [genealogy all-root-log-num-ways]
+  (every? (fn [[child parent]] #(or (= parent -1) (apply <= (map all-root-log-num-ways [child parent])))) genealogy))
+            
+(defn verify-above-hypothesis [& {:keys [n size] :or {n 1 size 10000}}]
+  (repeatedly n #(let [rand-pruf-code (tr/random-tree size)
+                       graph-rep (tr/prufer-code-to-graph-rep rand-pruf-code)
+                       {:keys [all-root-log-num-ways opt-root-id]} (tr/most-probable-root-for-a-given-tree graph-rep)
+                       genealogy (tr/rooted-acyclic-graph-to-genealogy [graph-rep opt-root-id])]
+                   (display all-root-log-num-ways)
+                   [(self-keyed-map graph-rep rand-pruf-code) (is-log-num-ways-monotonic-towards-the-optimum-root-id? genealogy all-root-log-num-ways)])))
+#_(def s (filter (comp not second) (verify-above-hypothesis)))
+
 (defn find-good-tree [{cnt :count :as bv-stuff} & {:keys [n-iterations] :or {n-iterations 100}}]
   (let [probable-edges (map-of-probable-edges bv-stuff)
         minimum-spanning-free-tree (mst-prim-with-priority-edges bv-stuff probable-edges)
-        {:keys [opt-root-id] :as sol-quality} (optimize-root-id bv-stuff minimum-spanning-free-tree)
+        {:keys [opt-root-id all-root-log-num-ways] :as sol-quality} (optimize-root-id bv-stuff minimum-spanning-free-tree)
         genealogy (tr/rooted-acyclic-graph-to-genealogy [minimum-spanning-free-tree opt-root-id])]
     (display sol-quality minimum-spanning-free-tree genealogy)
     genealogy))
@@ -174,9 +186,13 @@
   (time (with-open [rdr (clojure.java.io/reader fname)]
           (->> (line-seq rdr) (filter seq)
                (map-indexed #(vector %1 (read-string %2)))
-               (into (sorted-map))
-               tr/genealogy-to-rooted-acyclic-graph))))
-                    
+               (into (sorted-map))))))
+
+(defn solution-quality [bv-stuff genealogy]
+  (->> (tr/genealogy-to-rooted-acyclic-graph genealogy)
+       :acyclic-graph
+       (optimize-root-id bv-stuff)))
+
 (defn generate-random-bit-vector-set [n]
   (let [d (->> (fn [] (boolean-array (repeatedly n #({0 false 1 true} (rand-int 2))))) (repeatedly n)  into-array)
         dist-memory {}]
@@ -190,13 +206,18 @@
     {:distance-memory dist-memory :bit-vectors bit-vectors :count n}))
 
 (defn solve [& {:keys [fname solution-fname sample-solution]
-                :or {fname "/home/github/bitvector/data/bitvectors-genes.data.small"
-                     solution-fname "/home/github/bitvector/data/bitvectors-genes.data.small.msol"
-                     sample-solution "/home/github/bitvector/data/bitvectors-parents.data.small.txt"}}]
-  (let [bv (prf/prof :read (read-bit-vectors fname))
+                :or {fname "/home/github/bitvector/data/bitvectors-genes.data.small"}}]
+  (let [solution-fname (if solution-fname solution-fname (str fname ".my-parents"))
+        bv (prf/prof :read (read-bit-vectors fname))
         bv-stuff (prf/prof :calc-hashes (calc-hashes-and-hash-fns bv :approximation-factor 4))
         genealogy (prf/prof :find-good-tree (find-good-tree bv-stuff))]
-    (write-genealogy  genealogy solution-fname)))
+    (if sample-solution
+      (let [sample-solution-quality (prf/prof :sample-solution-quality (solution-quality bv-stuff (read-bit-vector-solution sample-solution)))]
+        (display sample-solution-quality)))
+    (write-genealogy genealogy solution-fname)))
+
+#_(prf/profile (time (solve :fname "/home/github/bitvector/data/bitvectors-genes.data.small"
+                            :sample-solution "/home/github/bitvector/data/bitvectors-parents.data.small.txt")))
 
 (defn solve-random
   ([out-fname] (let [bv-stuff (-> (generate-input-problem 10) (calc-hashes-and-hash-fns :approximation-factor 4))]

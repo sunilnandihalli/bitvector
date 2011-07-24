@@ -2,8 +2,10 @@
   (:require [clojure.contrib.generic.math-functions :as mfn])
   (:use iterate bitvector.debug clojure.inspector))
 
-
-(defn-memoized log-fact [n] (if (= n 0) 0 (+ (mfn/log n) (log-fact (dec n)))))
+(let [half-log-2-pi (* 0.5 (mfn/log (* 2 3.141592654)))]
+  (defn-memoized log-fact [n]
+    (if (= n 0) 0
+        (+ (* (+ n 0.5) (mfn/log n)) (- n) half-log-2-pi)))) 
 
 (defn average [& vs] (let [n (count vs)] (if (= n 0) 0 (/ (apply + vs) n))))
 
