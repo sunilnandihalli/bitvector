@@ -141,7 +141,7 @@
 
 (defn is-log-num-ways-monotonic-towards-the-optimum-root-id? [genealogy all-root-log-num-ways]
   (every? (fn [[child parent]] #(or (= parent -1) (apply <= (map all-root-log-num-ways [child parent])))) genealogy))
-            
+
 (defn verify-above-hypothesis [& {:keys [n size] :or {n 1 size 10000}}]
   (repeatedly n #(let [rand-pruf-code (tr/random-tree size)
                        graph-rep (tr/prufer-code-to-graph-rep rand-pruf-code)
@@ -149,8 +149,16 @@
                        genealogy (tr/rooted-acyclic-graph-to-genealogy [graph-rep opt-root-id])]
                    (display all-root-log-num-ways)
                    [(self-keyed-map graph-rep rand-pruf-code) (is-log-num-ways-monotonic-towards-the-optimum-root-id? genealogy all-root-log-num-ways)])))
-#_(def s (filter (comp not second) (verify-above-hypothesis)))
 
+(defn is-center-of-tree-optimum-root-id? [& {:keys [n size] :or {n 100 size 100}}]
+  (repeatedly n #(let [rand-pruf-code (tr/random-tree size)
+                       graph-rep (tr/prufer-code-to-graph-rep rand-pruf-code)
+                       {:keys [all-root-log-num-ways opt-root-id]} (tr/most-probable-root-for-a-given-tree graph-rep)
+                       tree-ctr (tr/center-of-tree graph-rep)]
+                   (tree-ctr opt-root-id))))
+
+#_(count (filter not (is-center-of-tree-optimum-root-id?)))
+                       
 (defn find-good-tree [{cnt :count :as bv-stuff} & {:keys [n-iterations] :or {n-iterations 100}}]
   (let [probable-edges (map-of-probable-edges bv-stuff)
         minimum-spanning-free-tree (mst-prim-with-priority-edges bv-stuff probable-edges)
