@@ -26,10 +26,6 @@
                        (if (aget bv bv-pos-id)
                          (bit-set hash hash-loc-id) hash)) 0 (map-indexed vector ids)))))
 
-(defn probable-nearest-bv-ids [{:keys [bv-hash-buckets hash-funcs bit-vectors] :as bv-stuff} id]
-  (thrush-with-sym [x] hash-funcs (mapcat (fn [[hf-id hf]] ((bv-hash-buckets hf-id) (hf (bit-vectors id)))) x)
-    (distinct x) (filter #(not= % id) x)))
-
 (defn all-probable-edges [{:keys [bv-hash-buckets] :as bv-stuff}]
   (loop [[[_ cur-hash-buckets] & rest-of-hash-buckets :as all-remaining-hash-buckets] (seq bv-hash-buckets)
          [[_ cur-bucket-nodes] & rest-of-hash-buckets-of-nodes :as w] nil
