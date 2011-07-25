@@ -1,7 +1,7 @@
 (ns bitvector.tree-utils
   (:require [clojure.contrib.generic.math-functions :as mfn]
             [clojure.contrib.profile :as prf])  
-  (:use iterate bitvector.debug clojure.inspector bitvector.log-utils))
+  (:use bitvector.debug clojure.inspector bitvector.log-utils))
 
 (defn center-of-tree [tree]
   {:pre [#_(do (println tree) true)]}

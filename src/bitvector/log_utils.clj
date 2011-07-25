@@ -1,6 +1,6 @@
 (ns bitvector.log-utils
   (:require [clojure.contrib.generic.math-functions :as mfn])
-  (:use iterate bitvector.debug clojure.inspector))
+  (:use bitvector.debug clojure.inspector))
 
 (let [half-log-2-pi (* 0.5 (mfn/log (* 2 3.141592654)))]
   (defn-memoized log-fact [n]

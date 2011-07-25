@@ -4,7 +4,7 @@
 	    [clojure.walk :as w]
 	    [clojure.contrib.trace :as t]
             [clojure.contrib.lazy-seqs :as ls])
-  (:use iterate clojure.inspector))
+  (:use clojure.inspector))
 
 #_(see (make-array Double/TYPE 3 2))
 #_(clojure.pprint/pprint
@@ -439,42 +439,6 @@
        (str "    "
 	    (list name (into ['this] (take argcount (repeatedly gensym)))))))))
 
-(let [mem (atom {})]
-  (defn rapleaf-mad-matrix-old [[row coll]]
-    (if-let [ret (or (@mem [row coll]) (@mem [coll row]))]
-      ret (let [ret (first (filter (comp not (set (into (iter {for i in (range row)}
-                                                              {collect (rapleaf-mad-matrix-old [i coll]) initially []})
-                                                        (iter {for i in (range coll)}
-                                                              {collect (rapleaf-mad-matrix-old [row i])})))) (range)))]
-            (swap! mem conj [(if (<= row coll) [row coll] [coll row]) ret]) ret))))
-
-(defn xor [& ps]
-  (loop [[p & rp] ps cur-state nil]
-    (cond
-     (and cur-state p) nil
-     p (recur rp p)
-     rp (recur rp cur-state)
-     true cur-state)))
-
-#_(xor false false)
-
-(let [p2 (ls/powers-of-2)]
-  (defn rapleaf-mad-matrix [[row coll]]
-    (loop [[i j] [row coll]
-           [p & ps] (reverse (take-while #(<= % (max row coll)) p2))
-           cur-val 0]
-      (if p (recur (map #(if (>= % p) (- % p) %) [i j])
-                   ps (+ cur-val (if (apply xor (map #(< % p) [i j])) p 0))) cur-val))))
-      
-      
-
-#_(let [n 32
-        ctr-string (str (apply str (repeat n "~3d")) "~%")]
-    (println (apply str (repeat (* 3 n) "-")))
-    (dorun (for [i (range n)]
-             (let [d (for [j (range n)]
-                       (rapleaf-mad-matrix [i j]))]
-               (apply clojure.pprint/cl-format true ctr-string d)))))
 
                 
   

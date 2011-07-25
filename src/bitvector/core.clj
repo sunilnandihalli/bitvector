@@ -5,7 +5,7 @@
             [clojure.contrib.profile :as prf]
             [bitvector.tree-utils :as tr])            
   (:import [java.io BufferedReader BufferedWriter FileReader])
-  (:use iterate bitvector.debug clojure.inspector bitvector.log-utils))
+  (:use bitvector.debug clojure.inspector bitvector.log-utils))
 
 (def ^{:doc "probability of mutation during cloning"} mutation-probability 0.2)
 (def ^{:doc "log of the mutation probability"} log-p (mfn/log mutation-probability))
