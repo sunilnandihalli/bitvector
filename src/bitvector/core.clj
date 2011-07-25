@@ -26,15 +26,6 @@
                        (if (aget bv bv-pos-id)
                          (bit-set hash hash-loc-id) hash)) 0 (map-indexed vector ids)))))
 
-(defn number-of-collisions-per-node [{:keys [bv-hash-buckets]}]
-  (let [update-freq (fn [mp [_ coll]]
-                      (let [n-1 (dec (count coll))]
-                        (reduce (fn [cur-mp node-id] (update-in cur-mp [[:node node-id]] #(if % (+ % n-1) n-1))) mp coll)))
-        update-for-a-given-hash-func (fn [mp [_ hash-func-map]] (reduce update-freq mp hash-func-map))
-        collisions-map (reduce update-for-a-given-hash-func {} bv-hash-buckets)
-        collision-frequencies (into (sorted-map) (frequencies (vals collisions-map)))]
-    collision-frequencies))
-
 (defn probable-nearest-bv-ids [{:keys [bv-hash-buckets hash-funcs bit-vectors] :as bv-stuff} id]
   (thrush-with-sym [x] hash-funcs (mapcat (fn [[hf-id hf]] ((bv-hash-buckets hf-id) (hf (bit-vectors id)))) x)
     (distinct x) (filter #(not= % id) x)))
