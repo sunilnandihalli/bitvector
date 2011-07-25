@@ -183,6 +183,9 @@
 
 #_(prf/profile (time (solve :fname "/home/github/bitvector/data/bitvectors-genes.data.small"
                             :sample-solution "/home/github/bitvector/data/bitvectors-parents.data.small.txt")))
+#_(prf/profile (time (solve :fname "/home/github/bitvector/data/bitvectors-genes.data.large"
+                            :sample-solution "/home/github/bitvector/data/bitvectors-parents.data.large.txt")))
+
 
 (defn generate-random-bit-vector-set [n]
   (let [d (->> (fn [] (boolean-array (repeatedly n #({0 false 1 true} (rand-int 2))))) (repeatedly n)  into-array)
