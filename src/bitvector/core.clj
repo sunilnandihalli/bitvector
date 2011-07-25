@@ -1,7 +1,6 @@
 (ns bitvector.core
   (:require [clojure.java.io :as io]
             [clojure.contrib.combinatorics :as comb]
-            [clojure.data.finger-tree :as ft]
             [clojure.contrib.generic.math-functions :as mfn]
             [clojure.contrib.profile :as prf]
             [bitvector.tree-utils :as tr])            
