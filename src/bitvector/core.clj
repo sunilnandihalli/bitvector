@@ -27,6 +27,7 @@
                          (bit-set hash hash-loc-id) hash)) 0 (map-indexed vector ids)))))
 
 (defn all-probable-edges [{:keys [bv-hash-buckets] :as bv-stuff}]
+  "returns a map from the edges which are obtained by taking combinations of two 
   (loop [[[_ cur-hash-buckets] & rest-of-hash-buckets :as all-remaining-hash-buckets] (seq bv-hash-buckets)
          [[_ cur-bucket-nodes] & rest-of-hash-buckets-of-nodes :as w] nil
          pb-edges (transient {})]
