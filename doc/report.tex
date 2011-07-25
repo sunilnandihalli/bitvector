@@ -61,37 +61,9 @@ probability~of~current~solution \propto  \left[ \prod_{i=0}^{N_c} {P_{T_c}^i} \l
 The solution to this problem is implemented in Clojure. The implementation consists of the hashing function, the modified minimum spanning and the evaluation of the cost function described. The implementation has no additional detail that needs to be added to what is already said for the first two topics. However, the third topic of the calculation of the cost function needs a little more  attention.
 
 \subsection{Implementation of the cost function}
-The estimation of the cost function involve two pieces, the evaluation of $Probability_{links}$ and finding the root that maximizes the number of ways in which the tree can be built. I initially set out to optimizing the cost function as a whole, however it turned out that the contribution from the $Probability_{links}$ was more significant and had more variation in it when you chose a different set of links. This helped me to decouple the problem into two pieces, first calculate the MST independently and then just find the optimum root id in the second step. On further thought, I realized that if $p->0.5$ we cannot make this simplifying decoupling of the problem.\\
+The estimation of the cost function involve two pieces, the evaluation of $Probability_{links}$ and finding the root that maximizes the number of ways in which the tree can be built. I initially set out to optimizing the cost function as a whole, however it turned out that the contribution from the $Probability_{links}$ was more significant and had more variation in it when you chose a different set of links. This helped me to decouple the problem into two pieces, first calculate the MST independently and then just find the optimum root id in the second step. On further thought, I realized that if $p->0.5$ we cannot make this simplifying decoupling of the problem. In this situation, root-id will play a more significant role in improving or reduction the probability of the given tree.\\
 In the process of calculating the optimium root id, one needs to be carefull. We would have to calculate the number of ways the tree can be with each node of the tree as root and pick the one that has the highest number of ways to be cloned. However, there are two problems with the above proposition. \\
  Firstly, there would be a lot of repetition of computation when the number of ways for a given root is calculated, that are repeated when compared to the evaluation with respect to another root. However, this can be solved using memoization of the values corresponding the sub-trees. \\
 Secondly, even though we are using memoization, if not calculated in the right order, the stack depth can blow due to large number of recursive calls. In order to avoid this, we can use order of the subtrees obtained by progressively removing the edges in their \emph{Prufer Order} and putting them back in the reverse order.
-
-\section{Formulae; inline vs. displayed}
-
-I insert an inline formula by surrounding it with a pair of
-single \$ symbols;  what is $x = 3 \times 5$?
-For a \emph{displayed} formula, use double-\$
-
-;/before and after --- include no blank lines!
-$$\mu^{\alpha+3} + (\alpha^{\beta}+\theta_{\gamma}+\delta+\zeta)$$
-
-\subsection{Numbered formulae}
-
-Use the \emph{equation} environment to get numbered formulae, e.g.,
-\begin{equation}
-	y_{i+1} = x_{i}^{2n} - \sqrt{5}x_{i-1}^{n} + \sqrt{x_{i-2}^7} -1
-\end{equation}
-
-\begin{equation}
-	\frac{\partial u}{\partial t} + \nabla^{4}u + \nabla^{2}u +
-        \frac12    |\nabla u|^{2}~ =~ c^2
-\end{equation}
-
-\section{Acknowledgments}
-
-Thanks to my buddies {\AE}schyulus and Chlo\"{e},
-who helped me define the macro \verb9\piRsquare9
-which is $\piRsquare$.
-The end.
 
 \end{document}             % End of document.
