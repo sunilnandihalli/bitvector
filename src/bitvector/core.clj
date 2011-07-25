@@ -24,19 +24,6 @@
     (fn [bv] (reduce (fn [hash [hash-loc-id bv-pos-id]]
                        (if (aget bv bv-pos-id)
                          (bit-set hash hash-loc-id) hash)) 0 (map-indexed vector ids)))))
-
-(defn all-probable-edges [{:keys [bv-hash-buckets] :as bv-stuff}]
-  "returns a map from the edges which are obtained by taking all possible elements two at a time from each bucket"
-  (loop [[[_ cur-hash-buckets] & rest-of-hash-buckets :as all-remaining-hash-buckets] (seq bv-hash-buckets)
-         [[_ cur-bucket-nodes] & rest-of-hash-buckets-of-nodes :as w] nil
-         pb-edges (transient {})]
-    (cond
-     cur-bucket-nodes (recur all-remaining-hash-buckets rest-of-hash-buckets-of-nodes
-                             (loop [[e & rest-of-es :as all-es] (comb/combinations cur-bucket-nodes 2) pb-edges pb-edges]
-                               (if-not e pb-edges
-                                       (recur rest-of-es (non-std-update! pb-edges (set e) inc-or-init)))))
-     cur-hash-buckets (recur rest-of-hash-buckets (seq cur-hash-buckets) pb-edges)
-     :else (persistent! pb-edges))))
                         
 (defn bit-dist [{memory :distance-memory bit-vectors :bit-vectors} [& [i j]]]
   "hamming distance between the the bitvectors i and j"
@@ -47,18 +34,6 @@
                                                        (let [v (bit-dist-help (bit-vectors i) (bit-vectors j))]
                                                          (swap! memory #(assoc % [i j] v)) v)))]                   
                         (cond (= i j) 0 (> i j) (get-dist i j) :else (get-dist j i)))))
-
-(defn map-of-probable-edges [{:keys [bv-hash-buckets] :as bv-stuff}]
-  "this function returns a map of edges to the number of times its end points collide when hashed using locality sensitive hashing"
-  (let [probable-edges (all-probable-edges bv-stuff)
-        trnsnt-n-collisions-2-trnsnt-edgset-map (loop [[[edge n-hash-collisions :as edge-pair] & rest-of-edge-collision-pairs] (seq probable-edges)
-                                                       n-collision-edges-map (transient {})]
-                                                  (if-not edge-pair n-collision-edges-map
-                                                          (recur rest-of-edge-collision-pairs
-                                                                 (non-std-update! n-collision-edges-map n-hash-collisions #(if % (conj! % edge) (transient [edge]))))))]
-    (reduce (fn [persistent-sorted-map [n-hash-collisions transient-edge-set]]
-              (assoc persistent-sorted-map n-hash-collisions (persistent! transient-edge-set)))
-            (sorted-map-by >) (persistent! trnsnt-n-collisions-2-trnsnt-edgset-map))))    
 
 (defn add-edge-to-graph [mst [start end]]
   "adds an edge to the graph"
@@ -130,35 +105,33 @@
        (spit out-fname parents)))
   ([genealogy] (write-genealogy genealogy "parents.out")))
                        
-(defn find-good-tree [bv-stuff]
-  (let [probable-edges (map-of-probable-edges bv-stuff)
-        minimum-spanning-free-tree (mst-prim-with-priority-edges bv-stuff probable-edges)
+(defn find-good-tree [{:keys [probable-edges] :as bv-stuff}]
+  (let [prioritized-edges (reduce (fn [cur-prioritized-edges [e f]] (update-in cur-prioritized-edges [f] #(conj % e))) (sorted-map-by >) probable-edges)
+        minimum-spanning-free-tree (mst-prim-with-priority-edges bv-stuff prioritized-edges)
         {:keys [opt-root-id all-root-log-num-ways] :as sol-quality} (optimize-root-id bv-stuff minimum-spanning-free-tree)
         genealogy (tr/rooted-acyclic-graph-to-genealogy [minimum-spanning-free-tree opt-root-id])]
     (display sol-quality minimum-spanning-free-tree genealogy)
     genealogy))
 
+(defn add-an-extra-hash-func [{:keys [bit-vectors hash-length number-of-hashes probable-edges] :or {probable-edges {} number-of-hashes 0} cnt :count :as bv-stuff}]
+  (let [new-hash-func (hash-calculating-func hash-length cnt)
+        hash-buckets (persistent! (reduce (fn [cur-hash-buckets [id bv]] (non-std-update! cur-hash-buckets (new-hash-func bv) #(conj % id))) (transient {}) bit-vectors))
+        new-probable-edges (persistent! (reduce (fn [cur-probable-edges [hash-val bvs-with-same-hash]]
+                                                  (reduce (fn [cur-cur-probable-edges e] (non-std-update! cur-cur-probable-edges (set e) inc-or-init))
+                                                          cur-probable-edges (comb/combinations bvs-with-same-hash 2))) (transient probable-edges) hash-buckets))]
+    (-> bv-stuff
+        (assoc :probable-edges new-probable-edges)
+        (assoc :number-of-hashes (inc number-of-hashes)))))
+
+(defn add-n-extra-hash-funcs [bv-stuff n]
+  (reduce (fn [cur-bv-stuff _] (add-an-extra-hash-func cur-bv-stuff)) bv-stuff (range n)))
+
 (defn calc-hashes-and-hash-fns [{:keys [bit-vectors] cnt :count :as bv-stuff} & {:keys [approximation-factor theta-const hash-length number-of-hashes]
                                                                                  :or {approximation-factor 4 theta-const 2}}]
   "calculate the hash functions and store the bit-vector ids in the corresponding buckets"
   (let [number-of-hashes (or number-of-hashes (* theta-const (mfn/pow cnt (/ 1 approximation-factor))))
-        hash-length (or hash-length (/ number-of-hashes theta-const))
-        hash-funcs (map-indexed vector (repeatedly number-of-hashes #(hash-calculating-func hash-length cnt)))
-        calc-hashes-fn (fn [hash-buckets [id bv]]
-                         (reduce (fn [cur-hash-buckets [hash-func-id hash-func]] (update-in cur-hash-buckets [hash-func-id (hash-func bv)] #(conj % id)))
-                                 hash-buckets hash-funcs))
-        bv-hash-buckets (reduce calc-hashes-fn {} bit-vectors)]
-    (merge bv-stuff (self-keyed-map bv-hash-buckets hash-funcs))))
-
-(defn add-an-extra-hash-func [{:keys [bv-hash-buckets bit-vectors hash-length hash-funcs probable-edges] cnt :count :as bv-stuff}]
-  (let [new-hash-func (hash-calculating-func hash-length cnt)
-        new-hash-func-id (count hash-funcs)
-        new-hash-funcs (into hash-funcs {new-hash-func-id new-hash-func})
-        new-bv-hash-buckets (reduce (fn [cur-hash-buckets [id bv]] (update-in cur-hash-buckets [new-hash-func-id (new-hash-func bv)] #(conj % id)))
-                                    bv-hash-buckets bit-vectors)
-        new-probable-edges (reduce (fn [cur-probable-edges [hash-val bvs-with-same-hash]]
-                                     (reduce (fn [cur-cur-probable-edges e]
-                                               (update-in cur-cur-probable-edges [e] inc-or-init)) (
+        hash-length (or hash-length (/ number-of-hashes theta-const))]
+    (add-n-extra-hash-funcs (assoc bv-stuff :hash-length hash-length) number-of-hashes)))
 
 (defn read-bit-vectors [fname]
   "read the bit vectors from the file"
@@ -191,6 +164,8 @@
         (display sample-solution-quality)))
     (write-genealogy genealogy solution-fname)))
 
+#_(time (solve :fname "/home/github/bitvector/data/bitvectors-genes.data.small"
+               :sample-solution "/home/github/bitvector/data/bitvectors-parents.data.small.txt"))
 #_(prf/profile (time (solve :fname "/home/github/bitvector/data/bitvectors-genes.data.small"
                             :sample-solution "/home/github/bitvector/data/bitvectors-parents.data.small.txt")))
 #_(prf/profile (time (solve :fname "/home/github/bitvector/data/bitvectors-genes.data.large"
