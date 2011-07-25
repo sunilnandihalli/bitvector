@@ -31,7 +31,7 @@ The problem at hand can be considered as the calculation of the minimum spanning
 
 The hashing function used is described here. For any bit vector $x$ , $h(x)$ is defined as the binary number formed by taking the ${a_i}^{th}$ bit of $x$ for $i$ in $[0,k)$ . $L$ such hashing functions are chosen. Both, $k$ and $L$ determine the error involved in finding the best edge for our MST. For further details on how $k$ and $L$ were chosen please look at Indyk's publication. The probability of a given set of links in tree with $n$ nodes and $n-1$ links with corresponding distances being $d_i$ is given by $prob_{links}$ \\
 \begin{equation}
-  prob_{links} = \prod_{i_{link} = 0}^{n-1} p^{d_i}(1-p)^{(n-d_i)}
+  Probability_{links} = \prod_{i_{link} = 0}^{n-1} p^{d_i}(1-p)^{(n-d_i)}
 \end{equation}
 
 \subsection{Finding the root id of the MST}
@@ -49,11 +49,22 @@ Let $P_T$ represent the number of ways tree $T$ can be created and $N_T$ represe
 
 \subsection{Calculating the quality of a given solution}
  As discussed before, any viable solution is a correct solution, however may not be the most probable solution. So, we need to be able to calculate the probability of a given solution at hand. It is easy to see that probability of a given solution being the actual solution is proprotional to the product of the number of ways a given tree can be built with the product of the probabilities of all the links present in the current tree. This can be calculated as 
-\begin{eqnarray}
- probability of current solution & = & P_T prob_{links}
-                                 & = & \left{ {\prod_{i=0}^{N_c} {P_{T_c}^i}} \left( \frac{(N_T - 1)!}{\prod_{i=0}^{N_c} {N_{T_c}^i}! } \right) \right} \prod_{i_{link} = 0}^{n-1} p^{d_i}(1-p)^{(n-d_i)}
-\end{eqnarray}
+\begin{equation}
+ probability~of~current~solution  \propto  P_T Probability_{links}
+\end{equation}
+\begin{equation}                  
+probability~of~current~solution \propto  \left[ \prod_{i=0}^{N_c} {P_{T_c}^i} \left( \frac{(N_T - 1)!}{\prod_{i=0}^{N_c} {N_{T_c}^i}! } \right) \right] \prod_{i_{link} = 0}^{n-1} p^{d_i}(1-p)^{(n-d_i)}
+\end{equation}
 
+\section{Implementation Details}
+
+The solution to this problem is implemented in Clojure. The implementation consists of the hashing function, the modified minimum spanning and the evaluation of the cost function described. The implementation has no additional detail that needs to be added to what is already said for the first two topics. However, the third topic of the calculation of the cost function needs a little more  attention.
+
+\subsection{Implementation of the cost function}
+The estimation of the cost function involve two pieces, the evaluation of $Probability_{links}$ and finding the root that maximizes the number of ways in which the tree can be built. I initially set out to optimizing the cost function as a whole, however it turned out that the contribution from the $Probability_{links}$ was more significant and had more variation in it when you chose a different set of links. This helped me to decouple the problem into two pieces, first calculate the MST independently and then just find the optimum root id in the second step. On further thought, I realized that if $p->0.5$ we cannot make this simplifying decoupling of the problem.\\
+In the process of calculating the optimium root id, one needs to be carefull. We would have to calculate the number of ways the tree can be with each node of the tree as root and pick the one that has the highest number of ways to be cloned. However, there are two problems with the above proposition. \\
+ Firstly, there would be a lot of repetition of computation when the number of ways for a given root is calculated, that are repeated when compared to the evaluation with respect to another root. However, this can be solved using memoization of the values corresponding the sub-trees. \\
+Secondly, even though we are using memoization, if not calculated in the right order, the stack depth can blow due to large number of recursive calls. In order to avoid this, we can use order of the subtrees obtained by progressively removing the edges in their \emph{Prufer Order} and putting them back in the reverse order.
 
 \section{Formulae; inline vs. displayed}
 
