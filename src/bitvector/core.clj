@@ -143,12 +143,6 @@
                                                                                  :or {approximation-factor 4 theta-const 2}}]
   (let [number-of-hashes (or number-of-hashes (* theta-const (mfn/pow cnt (/ 1 approximation-factor))))
         hash-length (or hash-length (/ number-of-hashes theta-const))
-        check-buckets (fn [hash-buckets]
-                        (reduce (fn [rem-elements mp]
-                                  (let [bit-vectors-with-atleast-one-collision (keep (fn [[_ v]] (if (> (count v) 1) v)) mp)]
-                                    (reduce #(reduce disj %1 %2) rem-elements bit-vectors-with-atleast-one-collision)))
-                                (set (range cnt)) (vals hash-buckets)))
-        check-for-continuity (fn [hash-buckets])
         hash-funcs (repeatedly number-of-hashes #(hash-calculating-func hash-length cnt))
         calc-hashes-fn (fn [hash-buckets [id bv]]
                          (reduce (fn [cur-hash-buckets [hash-func-id hash-func]] (update-in cur-hash-buckets [hash-func-id (hash-func bv)] #(conj % id)))
