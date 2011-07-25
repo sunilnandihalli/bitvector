@@ -8,18 +8,19 @@
   (:import [java.io BufferedReader BufferedWriter FileReader])
   (:use iterate bitvector.debug clojure.inspector bitvector.log-utils))
 
-(def mutation-probability 0.2)
-(def log-p (mfn/log mutation-probability))
+(def ^{:doc "probability of mutation during cloning" mutation-probability 0.2)
+(def ^{:doc "log of the mutation probability"} log-p (mfn/log mutation-probability))
 (def log-1-p (mfn/log (- 1 mutation-probability)))
 (def log-1-p-over-p (- log-1-p log-p))
 
-(defrecord tree-node [bit-vector number-of-nodes-in-tree-rooted-here tree-quality parent-id children])
 (defn abs [x] (if (< x 0) (- x) x))
 
 (defn-memoized log-parent-child-probability [bit-cnt dist]
+  "probability that two node which are bit-dist apart have a parent child relationship between them"
   (log-mult (log-pow log-p dist) (log-pow log-1-p (- bit-cnt dist))))
            
 (defn hash-calculating-func [hash-length dimension-d]
+  "a function to return a randomly generated locality sensitive hash function"
   (let [ids (take hash-length (shuffle (range dimension-d)))]
     (fn [bv] (reduce (fn [hash [hash-loc-id bv-pos-id]]
                        (if (aget bv bv-pos-id)
