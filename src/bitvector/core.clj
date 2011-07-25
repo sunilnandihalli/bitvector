@@ -141,6 +141,7 @@
            
 (defn calc-hashes-and-hash-fns [{:keys [bit-vectors] cnt :count :as bv-stuff} & {:keys [approximation-factor theta-const hash-length number-of-hashes]
                                                                                  :or {approximation-factor 4 theta-const 2}}]
+  "calculate the hash functions and store the bit-vector ids in the corresponding buckets"
   (let [number-of-hashes (or number-of-hashes (* theta-const (mfn/pow cnt (/ 1 approximation-factor))))
         hash-length (or hash-length (/ number-of-hashes theta-const))
         hash-funcs (repeatedly number-of-hashes #(hash-calculating-func hash-length cnt))
@@ -151,33 +152,24 @@
     (merge bv-stuff {:bv-hash-buckets bv-hash-buckets :hash-funcs (map-indexed vector hash-funcs)})))
 
 (defn read-bit-vectors [fname]
+  "read the bit vectors from the file"
   (let [d (time (with-open [rdr (clojure.java.io/reader fname)]
                   (->> (line-seq rdr) (map-indexed #(vector %1 (boolean-array (map {\0 false \1 true} %2)))) (into {}))))
         n (count d) dist-memory (atom {})]
     {:distance-memory dist-memory :bit-vectors d :count n}))
 
 (defn read-bit-vector-solution [fname]
+  "read the sample solution from the file fnam"
   (time (with-open [rdr (clojure.java.io/reader fname)]
           (->> (line-seq rdr) (filter seq)
                (map-indexed #(vector %1 (read-string %2)))
                (into (sorted-map))))))
 
 (defn solution-quality [bv-stuff genealogy]
+  "estimate the quality of given genealogy with respect to the bitvectors from bv-stuff"
   (->> (tr/genealogy-to-rooted-acyclic-graph genealogy)
        :acyclic-graph
        (optimize-root-id bv-stuff)))
-
-(defn generate-random-bit-vector-set [n]
-  (let [d (->> (fn [] (boolean-array (repeatedly n #({0 false 1 true} (rand-int 2))))) (repeatedly n)  into-array)
-        dist-memory {}]
-    {:distance-memory dist-memory :bit-vectors d :count n}))
-
-(defn generate-input-problem [n]
-  (let [clone (fn [parent mut-prob] (boolean-array (map #(if (< (rand) mut-prob) (not %) %) parent)))
-        bit-vectors (reduce (fn [population id] (into population {id (clone (population (rand-int (count population))) mutation-probability)}))
-                            {0 (boolean-array (repeatedly n #({0 false 1 true} (rand-int 2))))} (range 1 n))
-        dist-memory (atom {})]
-    {:distance-memory dist-memory :bit-vectors bit-vectors :count n}))
 
 (defn solve [& {:keys [fname solution-fname sample-solution]
                 :or {fname "/home/github/bitvector/data/bitvectors-genes.data.small"}}]
@@ -192,6 +184,19 @@
 
 #_(prf/profile (time (solve :fname "/home/github/bitvector/data/bitvectors-genes.data.small"
                             :sample-solution "/home/github/bitvector/data/bitvectors-parents.data.small.txt")))
+
+(defn generate-random-bit-vector-set [n]
+  (let [d (->> (fn [] (boolean-array (repeatedly n #({0 false 1 true} (rand-int 2))))) (repeatedly n)  into-array)
+        dist-memory {}]
+    {:distance-memory dist-memory :bit-vectors d :count n}))
+
+(defn generate-input-problem [n]
+  (let [clone (fn [parent mut-prob] (boolean-array (map #(if (< (rand) mut-prob) (not %) %) parent)))
+        bit-vectors (reduce (fn [population id] (into population {id (clone (population (rand-int (count population))) mutation-probability)}))
+                            {0 (boolean-array (repeatedly n #({0 false 1 true} (rand-int 2))))} (range 1 n))
+        dist-memory (atom {})]
+    {:distance-memory dist-memory :bit-vectors bit-vectors :count n}))
+
 
 (defn solve-random
   ([out-fname] (let [bv-stuff (-> (generate-input-problem 10) (calc-hashes-and-hash-fns :approximation-factor 4))]
