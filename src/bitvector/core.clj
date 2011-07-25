@@ -148,7 +148,17 @@
                          (reduce (fn [cur-hash-buckets [hash-func-id hash-func]] (update-in cur-hash-buckets [hash-func-id (hash-func bv)] #(conj % id)))
                                  hash-buckets hash-funcs))
         bv-hash-buckets (reduce calc-hashes-fn {} bit-vectors)]
-        (merge bv-stuff (self-keyed-map bv-hash-buckets hash-funcs))))
+    (merge bv-stuff (self-keyed-map bv-hash-buckets hash-funcs))))
+
+(defn add-an-extra-hash-func [{:keys [bv-hash-buckets bit-vectors hash-length hash-funcs probable-edges] cnt :count :as bv-stuff}]
+  (let [new-hash-func (hash-calculating-func hash-length cnt)
+        new-hash-func-id (count hash-funcs)
+        new-hash-funcs (into hash-funcs {new-hash-func-id new-hash-func})
+        new-bv-hash-buckets (reduce (fn [cur-hash-buckets [id bv]] (update-in cur-hash-buckets [new-hash-func-id (new-hash-func bv)] #(conj % id)))
+                                    bv-hash-buckets bit-vectors)
+        new-probable-edges (reduce (fn [cur-probable-edges [hash-val bvs-with-same-hash]]
+                                     (reduce (fn [cur-cur-probable-edges e]
+                                               (update-in cur-cur-probable-edges [e] inc-or-init)) (
 
 (defn read-bit-vectors [fname]
   "read the bit vectors from the file"
