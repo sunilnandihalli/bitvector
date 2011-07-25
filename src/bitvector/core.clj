@@ -137,18 +137,18 @@
         genealogy (tr/rooted-acyclic-graph-to-genealogy [minimum-spanning-free-tree opt-root-id])]
     (display sol-quality minimum-spanning-free-tree genealogy)
     genealogy))
-           
+
 (defn calc-hashes-and-hash-fns [{:keys [bit-vectors] cnt :count :as bv-stuff} & {:keys [approximation-factor theta-const hash-length number-of-hashes]
                                                                                  :or {approximation-factor 4 theta-const 2}}]
   "calculate the hash functions and store the bit-vector ids in the corresponding buckets"
   (let [number-of-hashes (or number-of-hashes (* theta-const (mfn/pow cnt (/ 1 approximation-factor))))
         hash-length (or hash-length (/ number-of-hashes theta-const))
-        hash-funcs (repeatedly number-of-hashes #(hash-calculating-func hash-length cnt))
+        hash-funcs (map-indexed vector (repeatedly number-of-hashes #(hash-calculating-func hash-length cnt)))
         calc-hashes-fn (fn [hash-buckets [id bv]]
                          (reduce (fn [cur-hash-buckets [hash-func-id hash-func]] (update-in cur-hash-buckets [hash-func-id (hash-func bv)] #(conj % id)))
-                                 hash-buckets (map-indexed vector hash-funcs)))
+                                 hash-buckets hash-funcs))
         bv-hash-buckets (reduce calc-hashes-fn {} bit-vectors)]
-    (merge bv-stuff {:bv-hash-buckets bv-hash-buckets :hash-funcs (map-indexed vector hash-funcs)})))
+        (merge bv-stuff (self-keyed-map bv-hash-buckets hash-funcs))))
 
 (defn read-bit-vectors [fname]
   "read the bit vectors from the file"
