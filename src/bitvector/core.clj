@@ -108,10 +108,9 @@
 (defn find-good-tree [{:keys [probable-edges] :as bv-stuff}]
   (let [prioritized-edges (reduce (fn [cur-prioritized-edges [e f]] (update-in cur-prioritized-edges [f] #(conj % e))) (sorted-map-by >) probable-edges)
         minimum-spanning-free-tree (mst-prim-with-priority-edges bv-stuff prioritized-edges)
-        {:keys [opt-root-id all-root-log-num-ways] :as sol-quality} (optimize-root-id bv-stuff minimum-spanning-free-tree)
+        {:keys [opt-root-id] :as sol-quality} (optimize-root-id bv-stuff minimum-spanning-free-tree)
         genealogy (tr/rooted-acyclic-graph-to-genealogy [minimum-spanning-free-tree opt-root-id])]
-    (display sol-quality minimum-spanning-free-tree genealogy)
-    genealogy))
+    (self-keyed-map sol-quality genealogy)))
 
 (defn add-an-extra-hash-func [{:keys [bit-vectors hash-length number-of-hashes probable-edges] :or {probable-edges {} number-of-hashes 0} cnt :count :as bv-stuff}]
   (let [new-hash-func (hash-calculating-func hash-length cnt)
@@ -120,11 +119,11 @@
                                                   (reduce (fn [cur-cur-probable-edges e] (non-std-update! cur-cur-probable-edges (set e) inc-or-init))
                                                           cur-probable-edges (comb/combinations bvs-with-same-hash 2))) (transient probable-edges) hash-buckets))]
     (-> bv-stuff
-        (assoc :probable-edges new-probable-edges)
-        (assoc :number-of-hashes (inc number-of-hashes)))))
+        (assoc! :probable-edges new-probable-edges)
+        (assoc! :number-of-hashes (inc number-of-hashes)))))
 
 (defn add-n-extra-hash-funcs [bv-stuff n]
-  (reduce (fn [cur-bv-stuff _] (add-an-extra-hash-func cur-bv-stuff)) bv-stuff (range n)))
+  (persistent! (reduce (fn [cur-bv-stuff _] (add-an-extra-hash-func cur-bv-stuff)) (transient bv-stuff) (range n))))
 
 (defn calc-hashes-and-hash-fns [{:keys [bit-vectors] cnt :count :as bv-stuff} & {:keys [approximation-factor theta-const hash-length number-of-hashes]
                                                                                  :or {approximation-factor 4 theta-const 2}}]
@@ -153,23 +152,26 @@
        :acyclic-graph
        (optimize-root-id bv-stuff)))
 
-(defn solve [& {:keys [fname solution-fname sample-solution]
-                :or {fname "/home/github/bitvector/data/bitvectors-genes.data.small"}}]
+(defn solve [& {:keys [fname solution-fname sample-solution n-increments delta-n-hashes]
+                :or {fname "/home/github/bitvector/data/bitvectors-genes.data.small"
+                     n-increments 5 delta-n-hashes 5}}]
   (let [solution-fname (if solution-fname solution-fname (str fname ".my-parents"))
         bv (prf/prof :read (read-bit-vectors fname))
         bv-stuff (prf/prof :calc-hashes (calc-hashes-and-hash-fns bv :approximation-factor 4))
-        genealogy (prf/prof :find-good-tree (find-good-tree bv-stuff))]
+        genealogies (reductions (fn [cur-genealogies cur-bv-stuff]
+                                  (prf/prof :find-good-tree (find-good-tree cur-bv-stuff)))
+                                (reductions (fn [cbv-stuff _] (add-n-extra-hash-funcs cbv-stuff delta-n-hashes)) bv-stuff (range n-increments)))]
+    (display genealogies)
     (if sample-solution
       (let [sample-solution-quality (prf/prof :sample-solution-quality (solution-quality bv-stuff (read-bit-vector-solution sample-solution)))]
         (display sample-solution-quality)))
-    (write-genealogy genealogy solution-fname)))
+    (map-indexed #(write-genealogy %2 (str solution-fname %1)) genealogies)))
 
 #_(time (solve :fname "/home/github/bitvector/data/bitvectors-genes.data.small"
                :sample-solution "/home/github/bitvector/data/bitvectors-parents.data.small.txt"))
 #_(prf/profile (time (solve :fname "/home/github/bitvector/data/bitvectors-genes.data.small"
                             :sample-solution "/home/github/bitvector/data/bitvectors-parents.data.small.txt")))
-#_(prf/profile (time (solve :fname "/home/github/bitvector/data/bitvectors-genes.data.large"
-                            :sample-solution "/home/github/bitvector/data/bitvectors-parents.data.large.txt")))
+#_(prf/profile (time (solve :fname "/home/github/bitvector/data/bitvectors-genes.data.large")))
 
 
 (defn generate-random-bit-vector-set [n]
