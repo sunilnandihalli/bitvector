@@ -8,7 +8,7 @@
   (:import [java.io BufferedReader BufferedWriter FileReader])
   (:use iterate bitvector.debug clojure.inspector bitvector.log-utils))
 
-(def ^{:doc "probability of mutation during cloning" mutation-probability 0.2)
+(def ^{:doc "probability of mutation during cloning"} mutation-probability 0.2)
 (def ^{:doc "log of the mutation probability"} log-p (mfn/log mutation-probability))
 (def log-1-p (mfn/log (- 1 mutation-probability)))
 (def log-1-p-over-p (- log-1-p log-p))
@@ -20,14 +20,14 @@
   (log-mult (log-pow log-p dist) (log-pow log-1-p (- bit-cnt dist))))
            
 (defn hash-calculating-func [hash-length dimension-d]
-  "a function to return a randomly generated locality sensitive hash function"
+  "a function to return a randomly generated locality sensitive hash function as described in Motwani et. al."
   (let [ids (take hash-length (shuffle (range dimension-d)))]
     (fn [bv] (reduce (fn [hash [hash-loc-id bv-pos-id]]
                        (if (aget bv bv-pos-id)
                          (bit-set hash hash-loc-id) hash)) 0 (map-indexed vector ids)))))
 
 (defn all-probable-edges [{:keys [bv-hash-buckets] :as bv-stuff}]
-  "returns a map from the edges which are obtained by taking combinations of two 
+  "returns a map from the edges which are obtained by taking all possible elements two at a time from each bucket"
   (loop [[[_ cur-hash-buckets] & rest-of-hash-buckets :as all-remaining-hash-buckets] (seq bv-hash-buckets)
          [[_ cur-bucket-nodes] & rest-of-hash-buckets-of-nodes :as w] nil
          pb-edges (transient {})]
@@ -40,6 +40,7 @@
      :else (persistent! pb-edges))))
                         
 (defn bit-dist [{memory :distance-memory bit-vectors :bit-vectors} [& [i j]]]
+  "hamming distance between the the bitvectors i and j"
   (prf/prof :bit-dist (let [bit-dist-help (fn [a b]
                                             (loop [[fa & ra] a [fb & rb] b d 0]
                                               (if (not (nil? fa)) (recur ra rb (if (not= fa fb) (inc d) d)) d)))
@@ -49,6 +50,7 @@
                         (cond (= i j) 0 (> i j) (get-dist i j) :else (get-dist j i)))))
 
 (defn map-of-probable-edges [{:keys [bv-hash-buckets] :as bv-stuff}]
+  "this function returns a map of edges to the number of times its end points collide when hashed using locality sensitive hashing"
   (let [probable-edges (all-probable-edges bv-stuff)
         trnsnt-n-collisions-2-trnsnt-edgset-map (loop [[[edge n-hash-collisions :as edge-pair] & rest-of-edge-collision-pairs] (seq probable-edges)
                                                        n-collision-edges-map (transient {})]
@@ -60,9 +62,11 @@
             (sorted-map-by >) (persistent! trnsnt-n-collisions-2-trnsnt-edgset-map))))    
 
 (defn add-edge-to-graph [mst [start end]]
+  "adds an edge to the graph"
   (-> mst (update-in [start] #(if % (conj % end) #{end})) (update-in [end] #(if % (conj % start) #{start}))))
 
 (defn update-disjoint-mst-coll [{:keys [disjoint-mst-coll nodes-to-mst-id-map] :as mst} [& [s e :as edge]]]
+  "at any stage, we maintain a collection of disjoint-msts and this function updates it by adding the edge [s e] to it joining two msts to get 1 mst if need be"
   (let [[tr-id1 tr-id2 :as tree-ids] (keep nodes-to-mst-id-map edge)]
     (if (and tr-id1 tr-id2 (= tr-id1 tr-id2)) mst
         (let [[tr1 tr2] (map disjoint-mst-coll tree-ids)
@@ -82,7 +86,7 @@
           {:disjoint-mst-coll new-disjoint-mst-coll :nodes-to-mst-id-map new-nodes-to-mst-id-map}))))     
     
 (defn mst-prim-edges [edges f {:keys [nodes-to-mst-id-map] :as mst}]
-  ;; mst is also used to check as to which nodes are already present in the current estimate of the MST
+  "this function takes a collection edges all of whose end points collide equal number of times when hashed, it is assumed that all edges whose end points collide more when hashed are necessarily shorter in the hamming distance sense even though it may not be true in reality"
   (let [all-potential-edges (thrush-with-sym [x] edges
                               (filter #(let [[tr-id1 tr-id2] (map nodes-to-mst-id-map %)]
                                          (or (not (and tr-id1 tr-id2)) (not= tr-id1 tr-id2)))  x)
@@ -95,12 +99,8 @@
        cur-dist-edge-set-pair (recur rest-of-dist-edge-set-pairs (seq cur-dist-edge-set) cur-mst)
        :else cur-mst))))
 
-(defn may-be-free-tree? [graph]
-  (let [n (count (keys graph))
-        n-edges (apply + (map (comp count val) graph))]
-    (if (= (* 2 (dec n)) n-edges) graph)))        
-
 (defn mst-prim-with-priority-edges [{cnt :count :as bv-stuff} probable-edge-map]
+  "calculate an approximate minimum spanning tree assuming that edges whose end points have the most collisions are necessarily shorter in terms of hamming distance than the ones whose edges whose endpoints collide fewer number of times"
   (let [pb-edg-map (ensure-sortedness probable-edge-map)
         edge-cost #(bit-dist bv-stuff %)
         {:keys [disjoint-mst-coll nodes-to-mst-id-map] :as mst}
@@ -112,9 +112,11 @@
         (do (display mst) (throw (Exception. "disjoint-pieces-found-in-mst"))))))
       
 (defn-memoized log-probability-of-bv [r n]
+  "define a memoized version of the function which calculates the probability of given pair of bit vectors having parent-child relation ship"
   (log-mult (log-pow log-p r) (log-pow log-1-p (- n r))))
 
 (defn optimize-root-id [{:keys [count bit-vectors] :as bv-stuff} gr]
+  "optimize root id such that the permutations of the clonings needed to create the given tree is maximized"
   (let [{:keys [opt-root-id log-num-ways all-root-log-num-ways]} (tr/most-probable-root-for-a-given-tree gr)
         log-parent-child-probability (reduce + (map (fn [[i j]]
                                                       (let [dist (bit-dist bv-stuff [i j])]
@@ -123,6 +125,7 @@
     (self-keyed-map log-num-ways log-parent-child-probability all-root-log-num-ways total-quality opt-root-id))) 
 
 (defn write-genealogy
+  "output the genealogy in the specified format"
   ([genealogy out-fname]
      (let [parents (apply str (interpose "\n" (vals (into (sorted-map) genealogy))))]
        (spit out-fname parents)))
