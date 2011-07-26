@@ -46,54 +46,6 @@
      (let [parents (apply str (interpose "\n" (vals (into (sorted-map) genealogy))))]
        (spit out-fname parents)))
   ([genealogy] (write-genealogy genealogy "parents.out")))
-                       
-(defn find-good-tree [{:keys [prioritized-edges count delta-number-of-hashes error-percentage] :or {delta-number-of-hashes 5 error-percentage 0.1} :as bv-stuff}]
-  (let [{:keys [genealogy] :as bv-stuff} (loop [{:keys [total-distance] :as cur-bv-stuff} bv-stuff i 0]
-                                           (let [{new-dist :total-distance :as new-bv-stuff}
-                                                 (reduce (fn [cc-bv-stuff _] (add-edge-to-tree-ensuring-resulting-tree-is-better-than-original cc-bv-stuff))
-                                                         cur-bv-stuff (range count))]
-                                             (if (< (- new-dist total-dist) (* error-percentage count)) new-bv-stuff
-                                               (recur (add-n-extra-hash-funcs new-bv-stuff delta-number-of-hashes)))))
-        minimum-spanning-free-tree (tr/genealogy-to-rooted-acyclic-graph genealogy)
-        {:keys [opt-root-id] :as sol-quality} (optimize-root-id bv-stuff minimum-spanning-free-tree)
-        genealogy (tr/rooted-acyclic-graph-to-genealogy [minimum-spanning-free-tree opt-root-id])]
-    (self-keyed-map sol-quality genealogy)))
-
-(defn add-an-extra-hash-func [{:keys [bit-vectors hash-length number-of-hashes prioritized-edges tried-edges]
-                               :or {prioritized-edges (pm/priority-map-by >) number-of-hashes 0 tried-edges #{}} cnt :count :as bv-stuff}]
-  (let [new-hash-func (hash-calculating-func hash-length cnt)
-        hash-buckets (persistent! (reduce (fn [cur-hash-buckets [id bv]] (non-std-update! cur-hash-buckets (new-hash-func bv) #(conj % id))) (transient {}) bit-vectors))
-        new-prioritized-edges (reduce (fn [cur-prioritized-edges [hash-val bvs-with-same-hash]]
-                                        (reduce (fn [cur-cur-probable-edges e]
-                                                  (let [se (set e)]
-                                                    (if-not (tried-edges se)
-                                                      (update-in cur-cur-probable-edges [se] inc-or-init) cur-cur-probable-edges)))
-                                                cur-probable-edges (comb/combinations bvs-with-same-hash 2))) prioritized-edges hash-buckets)]
-    (assoc bv-stuff :prioritized-edges new-prioritized-edges :number-of-hashes (inc number-of-hashes))))
-
-(defn add-n-extra-hash-funcs [bv-stuff n]
-  (persistent! (reduce (fn [cur-bv-stuff _] (add-an-extra-hash-func cur-bv-stuff)) (transient bv-stuff) (range n))))
-
-(defn calc-hashes-and-hash-fns [{:keys [bit-vectors] cnt :count :as bv-stuff} & {:keys [approximation-factor theta-const hash-length number-of-hashes]
-                                                                                 :or {approximation-factor 4 theta-const 2}}]
-  "calculate the hash functions and store the bit-vector ids in the corresponding buckets"
-  (let [number-of-hashes (or number-of-hashes (* theta-const (mfn/pow cnt (/ 1 approximation-factor))))
-        hash-length (or hash-length (/ number-of-hashes theta-const))]
-    (add-n-extra-hash-funcs (assoc bv-stuff :hash-length hash-length) number-of-hashes)))
-
-(defn read-bit-vectors [fname]
-  "read the bit vectors from the file"
-  (let [d (time (with-open [rdr (clojure.java.io/reader fname)]
-                  (->> (line-seq rdr) (map-indexed #(vector %1 (boolean-array (map {\0 false \1 true} %2)))) (into {}))))
-        n (count d) dist-memory (atom {})]
-    {:distance-memory dist-memory :bit-vectors d :count n}))
-
-(defn read-bit-vector-solution [fname]
-  "read the sample solution from the file fnam"
-  (time (with-open [rdr (clojure.java.io/reader fname)]
-          (->> (line-seq rdr) (filter seq)
-               (map-indexed #(vector %1 (read-string %2)))
-               (into (sorted-map))))))
 
 (defn move-root-in-genealogy [genealogy new-root-id]
   (loop [cur-genealogy genealogy to-be-updated new-root-id prev -1]
@@ -101,7 +53,7 @@
         (recur (assoc cur-genealogy to-be-updated prev) (cur-genealogy to-be-updated) to-be-updated))))
 
 (defn add-edge-to-tree-ensuring-resulting-tree-is-better-than-original [{:keys [genealogy tried-edges prioritized-edges total-distance] :as bv-stuff :or {tried-edges #{}}}]
-  {:pre [(set? new-edge) tried-edges genealogy]}
+  {:pre [tried-edges genealogy]}
   (let [[[& [s e :as new-edge] :as new-edge-as-set]] (peek prioritized-edges)
         dist (partial bit-dist bv-stuff)
         [path-between-end-points-of-new-edge is-disjoint] (loop [cur-s s s-path [s]]
@@ -125,6 +77,54 @@
                     :genealogy (-> (assoc genealogy d-edg-s -1)
                                    (move-root-in-genealogy (nth new-edge new-edge-end-id))
                                    (assoc (nth new-edge new-edge-end-id) (nth new-edge (case new-edge-end-id 1 0 0 1))))])))))) 
+
+(defn add-an-extra-hash-func [{:keys [bit-vectors hash-length number-of-hashes prioritized-edges tried-edges]
+                               :or {prioritized-edges (pm/priority-map-by >) number-of-hashes 0 tried-edges #{}} cnt :count :as bv-stuff}]
+  (let [new-hash-func (hash-calculating-func hash-length cnt)
+        hash-buckets (persistent! (reduce (fn [cur-hash-buckets [id bv]] (non-std-update! cur-hash-buckets (new-hash-func bv) #(conj % id))) (transient {}) bit-vectors))
+        new-prioritized-edges (reduce (fn [cur-prioritized-edges [hash-val bvs-with-same-hash]]
+                                        (reduce (fn [cur-cur-prioritized-edges e]
+                                                  (let [se (set e)]
+                                                    (if-not (tried-edges se)
+                                                      (update-in cur-cur-prioritized-edges [se] inc-or-init) cur-cur-prioritized-edges)))
+                                                cur-prioritized-edges (comb/combinations bvs-with-same-hash 2))) prioritized-edges hash-buckets)]
+    (assoc bv-stuff :prioritized-edges new-prioritized-edges :number-of-hashes (inc number-of-hashes))))
+
+(defn add-n-extra-hash-funcs [bv-stuff n]
+  (persistent! (reduce (fn [cur-bv-stuff _] (add-an-extra-hash-func cur-bv-stuff)) (transient bv-stuff) (range n))))
+                       
+(defn find-good-tree [{:keys [prioritized-edges count delta-number-of-hashes error-percentage] :or {delta-number-of-hashes 5 error-percentage 0.1} :as bv-stuff}]
+  (let [{:keys [genealogy] :as bv-stuff} (loop [{:keys [total-distance] :as cur-bv-stuff} bv-stuff]
+                                           (let [{new-dist :total-distance :as new-bv-stuff}
+                                                 (reduce (fn [cc-bv-stuff _] (add-edge-to-tree-ensuring-resulting-tree-is-better-than-original cc-bv-stuff))
+                                                         cur-bv-stuff (range count))]
+                                             (if (< (- new-dist total-distance) (* error-percentage count)) new-bv-stuff
+                                               (recur (add-n-extra-hash-funcs new-bv-stuff delta-number-of-hashes)))))
+        minimum-spanning-free-tree (tr/genealogy-to-rooted-acyclic-graph genealogy)
+        {:keys [opt-root-id] :as sol-quality} (optimize-root-id bv-stuff minimum-spanning-free-tree)
+        genealogy (tr/rooted-acyclic-graph-to-genealogy [minimum-spanning-free-tree opt-root-id])]
+    (self-keyed-map sol-quality genealogy)))
+
+(defn calc-hashes-and-hash-fns [{:keys [bit-vectors] cnt :count :as bv-stuff} & {:keys [approximation-factor theta-const hash-length number-of-hashes]
+                                                                                 :or {approximation-factor 4 theta-const 2}}]
+  "calculate the hash functions and store the bit-vector ids in the corresponding buckets"
+  (let [number-of-hashes (or number-of-hashes (* theta-const (mfn/pow cnt (/ 1 approximation-factor))))
+        hash-length (or hash-length (/ number-of-hashes theta-const))]
+    (add-n-extra-hash-funcs (assoc bv-stuff :hash-length hash-length) number-of-hashes)))
+
+(defn read-bit-vectors [fname]
+  "read the bit vectors from the file"
+  (let [d (time (with-open [rdr (clojure.java.io/reader fname)]
+                  (->> (line-seq rdr) (map-indexed #(vector %1 (boolean-array (map {\0 false \1 true} %2)))) (into {}))))
+        n (count d) dist-memory (atom {})]
+    {:distance-memory dist-memory :bit-vectors d :count n}))
+
+(defn read-bit-vector-solution [fname]
+  "read the sample solution from the file fnam"
+  (time (with-open [rdr (clojure.java.io/reader fname)]
+          (->> (line-seq rdr) (filter seq)
+               (map-indexed #(vector %1 (read-string %2)))
+               (into (sorted-map))))))
 
 (defn solution-quality [bv-stuff genealogy]
   "estimate the quality of given genealogy with respect to the bitvectors from bv-stuff"
