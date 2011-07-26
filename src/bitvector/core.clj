@@ -31,30 +31,6 @@
                                                        (let [v (bit-dist-help (bit-vectors i) (bit-vectors j))]
                                                          (swap! memory #(assoc % [i j] v)) v)))]                   
                         (cond (= i j) 0 (> i j) (get-dist i j) :else (get-dist j i)))))
-
-(defn add-edge-to-graph [mst [start end]]
-  "adds an edge to the graph"
-  (-> mst (update-in [start] #(if % (conj % end) #{end})) (update-in [end] #(if % (conj % start) #{start}))))
-
-(defn update-disjoint-mst-coll [{:keys [disjoint-mst-coll nodes-to-mst-id-map] :as mst} [& [s e :as edge]]]
-  "at any stage, we maintain a collection of disjoint-msts and this function updates it by adding the edge [s e] to it joining two msts to get 1 mst if need be"
-  (let [[tr-id1 tr-id2 :as tree-ids] (keep nodes-to-mst-id-map edge)]
-    (if (and tr-id1 tr-id2 (= tr-id1 tr-id2)) mst
-        (let [[tr1 tr2] (map disjoint-mst-coll tree-ids)
-              n-tr-ids (count tree-ids)
-              new-tree (-> (case n-tr-ids 0 {} 1 tr1 2 (into tr1 tr2)) (add-edge-to-graph [s e]))
-              new-tree-id (case n-tr-ids 
-                                0 (-> (rseq disjoint-mst-coll) ffirst inc-or-init)
-                                1 (first tree-ids)
-                                2 (if (> (count tr1) (count tr2)) tr-id1 tr-id2))
-              new-disjoint-mst-coll (-> (reduce dissoc disjoint-mst-coll tree-ids) (assoc new-tree-id new-tree))
-              assign-new-tree-id #(assoc %1 %2 new-tree-id)
-              new-nodes-to-mst-id-map (thrush-with-sym [x]
-                                        (reduce assign-new-tree-id nodes-to-mst-id-map edge)
-                                        (condp = new-tree-id ;; can simplify .. written this way for performance...
-                                            tr-id1 (reduce assign-new-tree-id x (keys tr2))
-                                            tr-id2 (reduce assign-new-tree-id x (keys tr1)) x))]
-          {:disjoint-mst-coll new-disjoint-mst-coll :nodes-to-mst-id-map new-nodes-to-mst-id-map}))))     
       
 (defn optimize-root-id [{:keys [count bit-vectors] :as bv-stuff} gr]
   "optimize root id such that the permutations of the clonings needed to create the given tree is maximized"
