@@ -80,13 +80,12 @@
                   (recur remaining-priority-edge-set-pairs (mst-prim-edges cur-equal-priority-edge-set edge-cost cur-mst))))]
     (if (= 1 (count disjoint-mst-coll)) (second (first disjoint-mst-coll))
         (do (display mst) (throw (Exception. "disjoint-pieces-found-in-mst"))))))
-      x
+      
 (defn optimize-root-id [{:keys [count bit-vectors] :as bv-stuff} gr]
   "optimize root id such that the permutations of the clonings needed to create the given tree is maximized"
   (let [{:keys [opt-root-id log-num-ways all-root-log-num-ways]} (tr/most-probable-root-for-a-given-tree gr)
-        log-parent-child-probability (reduce + (map (fn [[i j]]
-                                                      (let [dist (bit-dist bv-stuff [i j])]
-                                                        (log-probability-of-bv dist count))) (prf/prof :edges-in-prufer-order (tr/edges-in-prufer-order gr))))
+        total-parent-child-dist (reduce (fn [s edge] (+ s (bit-dist bv-stuff edge))) 0 (prf/prof :edges-in-prufer-order (tr/edges-in-prufer-order gr)))
+        log-parent-child-probability (log-mult (log-pow log-p total-parent-child-dist) (log-pow log-1-p (- (* count count) total-parent-child-dist)))
         total-quality (log-mult log-num-ways log-parent-child-probability)]
     (self-keyed-map log-num-ways log-parent-child-probability all-root-log-num-ways total-quality opt-root-id))) 
 
