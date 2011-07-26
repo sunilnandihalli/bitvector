@@ -47,8 +47,15 @@
        (spit out-fname parents)))
   ([genealogy] (write-genealogy genealogy "parents.out")))
                        
-(defn find-good-tree [{:keys [prioritized-edges] :as bv-stuff}]
-  (let [{:keys [opt-root-id] :as sol-quality} (optimize-root-id bv-stuff minimum-spanning-free-tree)
+(defn find-good-tree [{:keys [prioritized-edges count delta-number-of-hashes error-percentage] :or {delta-number-of-hashes 5 error-percentage 0.1} :as bv-stuff}]
+  (let [{:keys [genealogy] :as bv-stuff} (loop [{:keys [total-distance] :as cur-bv-stuff} bv-stuff i 0]
+                                           (let [{new-dist :total-distance :as new-bv-stuff}
+                                                 (reduce (fn [cc-bv-stuff _] (add-edge-to-tree-ensuring-resulting-tree-is-better-than-original cc-bv-stuff))
+                                                         cur-bv-stuff (range count))]
+                                             (if (< (- new-dist total-dist) (* error-percentage count)) new-bv-stuff
+                                               (recur (add-n-extra-hash-funcs new-bv-stuff delta-number-of-hashes)))))
+        minimum-spanning-free-tree (tr/genealogy-to-rooted-acyclic-graph genealogy)
+        {:keys [opt-root-id] :as sol-quality} (optimize-root-id bv-stuff minimum-spanning-free-tree)
         genealogy (tr/rooted-acyclic-graph-to-genealogy [minimum-spanning-free-tree opt-root-id])]
     (self-keyed-map sol-quality genealogy)))
 
@@ -93,7 +100,7 @@
     (if (= to-be-updated -1) cur-genealogy
         (recur (assoc cur-genealogy to-be-updated prev) (cur-genealogy to-be-updated) to-be-updated))))
 
-(defn add-edge-to-tree-ensuring-resulting-tree-is-better-than-original [{:keys [genealogy tried-edges prioritized-edges] :as bv-stuff :or {tried-edges #{}}}]
+(defn add-edge-to-tree-ensuring-resulting-tree-is-better-than-original [{:keys [genealogy tried-edges prioritized-edges total-distance] :as bv-stuff :or {tried-edges #{}}}]
   {:pre [(set? new-edge) tried-edges genealogy]}
   (let [[[& [s e :as new-edge] :as new-edge-as-set]] (peek prioritized-edges)
         dist (partial bit-dist bv-stuff)
@@ -108,15 +115,16 @@
                                                                              (recur cur-parent-e (cons cur-parent-e e-path)))))
                                                                   e [[(conj s-path e) nil] true]
                                                                   (recur cur-parent-s (conj s-path cur-parent-s)))))]
-    (-> (assoc bv-stuff
-          :genealogy (if is-disjoint (-> (move-root-in-genealogy genealogy s) (assoc s e)) 
-                         (let [[start-list end-list :as path-edge-list] (map #(partition 2 1 %) path-between-end-points-of-new-edge)
-                               [[d-edg-s _ :as min-edge] min-dist new-edge-end-id] (min-key second (mapcat #(map (fn [edg] [edg (dist edg) %2]) %1) path-edge-list (range)))]
-                           (if-not (< (dist new-edge) min-dist) genealogy
-                                   (-> (assoc genealogy d-edg-s -1)
-                                       (move-root-in-genealogy (nth new-edge new-edge-end-id))
-                                       (assoc (nth new-edge new-edge-end-id) (nth new-edge (case new-edge-end-id 1 0 0 1)))))))
-          :tried-edges (conj tried-edges new-edge-as-set) :prioritized-edges (pop prioritized-edges))))) 
+    (apply assoc bv-stuff :tried-edges (conj tried-edges new-edge-as-set) :prioritized-edges (pop prioritized-edges)
+           (if is-disjoint [:genealogy (-> (move-root-in-genealogy genealogy s) (assoc s e)) :total-distance (+ total-distance (dist new-edge))] 
+               (let [[start-list end-list :as path-edge-list] (map #(partition 2 1 %) path-between-end-points-of-new-edge)
+                     [[d-edg-s _ :as max-edge] max-dist new-edge-end-id] (max-key second (mapcat #(map (fn [edg] [edg (dist edg) %2]) %1) path-edge-list (range)))
+                     new-edge-dist (dist new-edge)]
+                 (if (< new-edge-dist max-dist)
+                   [:total-distance (- (+ total-distance new-edge-dist) max-dist)
+                    :genealogy (-> (assoc genealogy d-edg-s -1)
+                                   (move-root-in-genealogy (nth new-edge new-edge-end-id))
+                                   (assoc (nth new-edge new-edge-end-id) (nth new-edge (case new-edge-end-id 1 0 0 1))))])))))) 
 
 (defn solution-quality [bv-stuff genealogy]
   "estimate the quality of given genealogy with respect to the bitvectors from bv-stuff"
