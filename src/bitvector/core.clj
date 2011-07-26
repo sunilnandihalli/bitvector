@@ -69,14 +69,12 @@
        cur-dist-edge (recur all-dist-edge-set-pairs rest-of-cur-dist-edges (update-disjoint-mst-coll cur-mst cur-dist-edge))
        cur-dist-edge-set-pair (recur rest-of-dist-edge-set-pairs (seq cur-dist-edge-set) cur-mst)
        :else cur-mst))))
-
-(defn mst-prim-with-priority-edges [{cnt :count :as bv-stuff} probable-edge-map]
+;;---------------------------------------------------------------------
+(defn mst-prim-with-prioritized-edges [{:keys [prioritized-edges] cnt :count :as bv-stuff}]
   "calculate an approximate minimum spanning tree assuming that edges whose end points have the most collisions are necessarily shorter in terms of hamming distance than the ones whose edges whose endpoints collide fewer number of times"
-  (let [pb-edg-map (ensure-sortedness probable-edge-map)
-        edge-cost #(bit-dist bv-stuff %)
+  (let [edge-cost #(bit-dist bv-stuff %)
         {:keys [disjoint-mst-coll nodes-to-mst-id-map] :as mst}
-        (loop [[[cur-edge-priority cur-equal-priority-edge-set :as edge-set-pairs-available] & remaining-priority-edge-set-pairs] (seq pb-edg-map)
-               cur-mst {:disjoint-mst-coll (sorted-map) :nodes-to-mst-id-map {}}]
+        (loop [cur-mst {:disjoint-mst-coll (sorted-map) :nodes-to-mst-id-map {}}]
           (if-not edge-set-pairs-available cur-mst
                   (recur remaining-priority-edge-set-pairs (mst-prim-edges cur-equal-priority-edge-set edge-cost cur-mst))))]
     (if (= 1 (count disjoint-mst-coll)) (second (first disjoint-mst-coll))
@@ -103,12 +101,15 @@
         genealogy (tr/rooted-acyclic-graph-to-genealogy [minimum-spanning-free-tree opt-root-id])]
     (self-keyed-map sol-quality genealogy)))
 
-(defn add-an-extra-hash-func [{:keys [bit-vectors hash-length number-of-hashes prioritized-edges]
-                               :or {prioritized-edges (pm/priority-map-by >) number-of-hashes 0} cnt :count :as bv-stuff}]
+(defn add-an-extra-hash-func [{:keys [bit-vectors hash-length number-of-hashes prioritized-edges tried-edges]
+                               :or {prioritized-edges (pm/priority-map-by >) number-of-hashes 0 tried-edges #{}} cnt :count :as bv-stuff}]
   (let [new-hash-func (hash-calculating-func hash-length cnt)
         hash-buckets (persistent! (reduce (fn [cur-hash-buckets [id bv]] (non-std-update! cur-hash-buckets (new-hash-func bv) #(conj % id))) (transient {}) bit-vectors))
         new-prioritized-edges (reduce (fn [cur-prioritized-edges [hash-val bvs-with-same-hash]]
-                                        (reduce (fn [cur-cur-probable-edges e] (update-in cur-cur-probable-edges [(set e)] inc-or-init))
+                                        (reduce (fn [cur-cur-probable-edges e]
+                                                  (let [se (set e)]
+                                                    (if-not (tried-edges se)
+                                                      (update-in cur-cur-probable-edges [se] inc-or-init) cur-cur-probable-edges)))
                                                 cur-probable-edges (comb/combinations bvs-with-same-hash 2))) prioritized-edges hash-buckets)]
     (assoc bv-stuff :prioritized-edges new-prioritized-edges :number-of-hashes (inc number-of-hashes))))
 
@@ -136,7 +137,7 @@
                (map-indexed #(vector %1 (read-string %2)))
                (into (sorted-map))))))
 
-(defn add-edge-to-tree-ensuring-resulting-tree-is-better-than-original [{:keys [genealogy tried-edges] :as bv-stuff} [& [s e] :as new-edge]]
+(defn add-edge-to-tree-ensuring-resulting-tree-is-better-than-original [{:keys [genealogy tried-edges] :as bv-stuff :or {tried-edges #{}}} [& [s e] :as new-edge]]
   {:pre [(set? new-edge) tried-edges genealogy]}
   (if (tried-edges new-edge)  bv-stuff
       (let [dist (partial bit-dist bv-stuff)
