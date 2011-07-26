@@ -157,15 +157,18 @@
                      n-increments 5 delta-n-hashes 5}}]
   (let [solution-fname (if solution-fname solution-fname (str fname ".my-parents"))
         bv (prf/prof :read (read-bit-vectors fname))
-        bv-stuff (prf/prof :calc-hashes (calc-hashes-and-hash-fns bv :approximation-factor 4))
-        genealogies (reductions (fn [cur-genealogies cur-bv-stuff]
-                                  (prf/prof :find-good-tree (find-good-tree cur-bv-stuff)))
-                                (reductions (fn [cbv-stuff _] (add-n-extra-hash-funcs cbv-stuff delta-n-hashes)) bv-stuff (range n-increments)))]
-    (display genealogies)
-    (if sample-solution
-      (let [sample-solution-quality (prf/prof :sample-solution-quality (solution-quality bv-stuff (read-bit-vector-solution sample-solution)))]
-        (display sample-solution-quality)))
-    (map-indexed #(write-genealogy %2 (str solution-fname %1)) genealogies)))
+        sample-solution-quality (if sample-solution (prf/prof :sample-solution-quality (solution-quality bv (read-bit-vector-solution sample-solution))))
+        bv-stuff (prf/prof :calc-hashes (calc-hashes-and-hash-fns bv :approximation-factor 4))]
+    (display sample-solution-quality)
+    (loop [i-increments 0 cur-bv-stuff bv-stuff sol-qualities nil]
+      (let [new-bv-stuff (prf/prof :add-hashes (add-n-extra-hash-funcs cur-bv-stuff delta-n-hashes))
+            {:keys [sol-quality genealogy]} (prf/prof :find-good-tree (find-good-tree new-bv-stuff))]
+        (write-genealogy genealogy (str solution-fname i-increments))
+        (clojure.pprint/pprint (dissoc sol-quality :all-root-log-num-ways))
+        (if (< i-increments n-increments) (recur (inc i-increments) new-bv-stuff (conj sol-qualities sol-quality))
+            (let [reduced-sol-qualities (map #(dissoc % :all-root-log-num-ways) sol-qualities)]
+                  (display reduced-sol-qualities genealogy)))))))
+
 
 #_(time (solve :fname "/home/github/bitvector/data/bitvectors-genes.data.small"
                :sample-solution "/home/github/bitvector/data/bitvectors-parents.data.small.txt"))
@@ -185,7 +188,6 @@
                             {0 (boolean-array (repeatedly n #({0 false 1 true} (rand-int 2))))} (range 1 n))
         dist-memory (atom {})]
     {:distance-memory dist-memory :bit-vectors bit-vectors :count n}))
-
 
 (defn solve-random
   ([out-fname] (let [bv-stuff (-> (generate-input-problem 10) (calc-hashes-and-hash-fns :approximation-factor 4))]
