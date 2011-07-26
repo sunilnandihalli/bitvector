@@ -3,7 +3,8 @@
             [clojure.contrib.combinatorics :as comb]
             [clojure.contrib.generic.math-functions :as mfn]
             [clojure.contrib.profile :as prf]
-            [bitvector.tree-utils :as tr])            
+            [bitvector.tree-utils :as tr]
+            [bitvector.priority-map :as pm])
   (:import [java.io BufferedReader BufferedWriter FileReader])
   (:use bitvector.debug clojure.inspector bitvector.log-utils))
 
