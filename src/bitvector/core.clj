@@ -137,31 +137,35 @@
                (map-indexed #(vector %1 (read-string %2)))
                (into (sorted-map))))))
 
-(defn add-edge-to-tree-ensuring-resulting-tree-is-better-than-original [{:keys [genealogy tried-edges] :as bv-stuff :or {tried-edges #{}}} [& [s e] :as new-edge]]
+(defn move-root-in-genealogy [genealogy new-root-id]
+  (loop [cur-genealogy genealogy to-be-updated new-root-id prev -1]
+    (if (= to-be-updated -1) cur-genealogy
+        (recur (assoc cur-genealogy to-be-updated prev) (cur-genealogy to-be-updated) to-be-updated))))
+
+(defn add-edge-to-tree-ensuring-resulting-tree-is-better-than-original [{:keys [genealogy tried-edges prioritized-edges] :as bv-stuff :or {tried-edges #{}}}]
   {:pre [(set? new-edge) tried-edges genealogy]}
-  (if (tried-edges new-edge)  bv-stuff
-      (let [dist (partial bit-dist bv-stuff)
-            path-between-end-points-of-new-edge (loop [cur-s s s-path [s]]
-                                                  (let [cur-parent-s (genealogy cur-s)]
-                                                    (condp = cur-parent-s
-                                                        -1 (loop [cur-e e e-path [e]]
-                                                             (let [cur-parent-e (genealogy cur-e)]
-                                                               (condp = cur-parent-e
-                                                                   -1 [s-path e-path] s [nil (conj e-path s)]
-                                                                   (recur cur-parent-e (cons cur-parent-e e-path)))))
-                                                        e [(conj s-path e) nil]
-                                                        (recur cur-parent-s (conj s-path cur-parent-s)))))
-            [start-list end-list :as path-edge-list] (map #(partition 2 1 %) path-between-end-points-of-new-edge)
-            [min-edge min-dist new-edge-end-id] (min-key second (mapcat #(map (fn [edg] [edg (dist edg) %2]) %1) path-edge-list (range)))
-            new-edge-dist (dist new-edge)
-            new-tried-edges (conj tried-edges new-edge)
-            update-genealogy (fn []
-                               (persistent! (let [oriented-edge (case new-edge-end-id 0 new-edge 1 (reverse new-edge))]
-                                              (reduce (fn [cur-genealogy [child parent]] (assoc! cur-genealogy child parent)) (transient genealogy)
-                                                      (cons oriented-edge (take-while #(not= min-edge %) (path-edge-list new-edge-end-id)))))))]
-        (-> (if (< new-edge-dist min-dist)
-              (assoc bv-stuff :genealogy (update-genealogy)) bv-stuff)
-            (assoc :tried-edges new-tried-edges)))))
+  (let [[[& [s e :as new-edge] :as new-edge-as-set]] (peek prioritized-edges)
+        dist (partial bit-dist bv-stuff)
+        [path-between-end-points-of-new-edge is-disjoint] (loop [cur-s s s-path [s]]
+                                                            (let [cur-parent-s (genealogy cur-s)]
+                                                              (condp = cur-parent-s
+                                                                  -1 (loop [cur-e e e-path [e]]
+                                                                       (let [cur-parent-e (genealogy cur-e)]
+                                                                         (condp = cur-parent-e
+                                                                             -1 [[s-path e-path] (not (= cur-parent-e cur-parent-s))]
+                                                                             s  [[nil (conj e-path s)] true] 
+                                                                             (recur cur-parent-e (cons cur-parent-e e-path)))))
+                                                                  e [[(conj s-path e) nil] true]
+                                                                  (recur cur-parent-s (conj s-path cur-parent-s)))))]
+    (-> (assoc bv-stuff
+          :genealogy (if is-disjoint (-> (move-root-in-genealogy genealogy s) (assoc s e)) 
+                         (let [[start-list end-list :as path-edge-list] (map #(partition 2 1 %) path-between-end-points-of-new-edge)
+                               [[d-edg-s _ :as min-edge] min-dist new-edge-end-id] (min-key second (mapcat #(map (fn [edg] [edg (dist edg) %2]) %1) path-edge-list (range)))]
+                           (if-not (< (dist new-edge) min-dist) genealogy
+                                   (-> (assoc genealogy d-edg-s -1)
+                                       (move-root-in-genealogy (nth new-edge new-edge-end-id))
+                                       (assoc (nth new-edge new-edge-end-id) (nth new-edge (case new-edge-end-id 1 0 0 1)))))))
+          :tried-edges (conj tried-edges new-edge-as-set) :prioritized-edges (pop prioritized-edges))))) 
 
 (defn solution-quality [bv-stuff genealogy]
   "estimate the quality of given genealogy with respect to the bitvectors from bv-stuff"
