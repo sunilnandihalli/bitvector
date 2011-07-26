@@ -13,10 +13,6 @@
 (def log-1-p-over-p (- log-1-p log-p))
 
 (defn abs [x] (if (< x 0) (- x) x))
-
-(defn-memoized log-parent-child-probability [bit-cnt dist]
-  "probability that two node which are bit-dist apart have a parent child relationship between them"
-  (log-mult (log-pow log-p dist) (log-pow log-1-p (- bit-cnt dist))))
            
 (defn hash-calculating-func [hash-length dimension-d]
   "a function to return a randomly generated locality sensitive hash function as described in Motwani et. al."
@@ -168,7 +164,6 @@
         (if (< i-increments n-increments) (recur (inc i-increments) new-bv-stuff (conj sol-qualities sol-quality))
             (let [reduced-sol-qualities (map #(dissoc % :all-root-log-num-ways) sol-qualities)]
                   (display reduced-sol-qualities genealogy)))))))
-
 
 #_(time (solve :fname "/home/github/bitvector/data/bitvectors-genes.data.small"
                :sample-solution "/home/github/bitvector/data/bitvectors-parents.data.small.txt"))
