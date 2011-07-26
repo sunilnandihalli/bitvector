@@ -97,22 +97,20 @@
        (spit out-fname parents)))
   ([genealogy] (write-genealogy genealogy "parents.out")))
                        
-(defn find-good-tree [{:keys [probable-edges] :as bv-stuff}]
-  (let [prioritized-edges (reduce (fn [cur-prioritized-edges [e f]] (update-in cur-prioritized-edges [f] #(conj % e))) (sorted-map-by >) probable-edges)
-        minimum-spanning-free-tree (mst-prim-with-priority-edges bv-stuff prioritized-edges)
+(defn find-good-tree [{:keys [prioritized-edges] :as bv-stuff}]
+  (let [minimum-spanning-free-tree (mst-prim-with-priority-edges bv-stuff prioritized-edges)
         {:keys [opt-root-id] :as sol-quality} (optimize-root-id bv-stuff minimum-spanning-free-tree)
         genealogy (tr/rooted-acyclic-graph-to-genealogy [minimum-spanning-free-tree opt-root-id])]
     (self-keyed-map sol-quality genealogy)))
 
-(defn add-an-extra-hash-func [{:keys [bit-vectors hash-length number-of-hashes probable-edges] :or {probable-edges {} number-of-hashes 0} cnt :count :as bv-stuff}]
+(defn add-an-extra-hash-func [{:keys [bit-vectors hash-length number-of-hashes prioritized-edges]
+                               :or {prioritized-edges (pm/priority-map-by >) number-of-hashes 0} cnt :count :as bv-stuff}]
   (let [new-hash-func (hash-calculating-func hash-length cnt)
         hash-buckets (persistent! (reduce (fn [cur-hash-buckets [id bv]] (non-std-update! cur-hash-buckets (new-hash-func bv) #(conj % id))) (transient {}) bit-vectors))
-        new-probable-edges (persistent! (reduce (fn [cur-probable-edges [hash-val bvs-with-same-hash]]
-                                                  (reduce (fn [cur-cur-probable-edges e] (non-std-update! cur-cur-probable-edges (set e) inc-or-init))
-                                                          cur-probable-edges (comb/combinations bvs-with-same-hash 2))) (transient probable-edges) hash-buckets))]
-    (-> bv-stuff
-        (assoc! :probable-edges new-probable-edges)
-        (assoc! :number-of-hashes (inc number-of-hashes)))))
+        new-prioritized-edges (reduce (fn [cur-prioritized-edges [hash-val bvs-with-same-hash]]
+                                        (reduce (fn [cur-cur-probable-edges e] (update-in cur-cur-probable-edges [(set e)] inc-or-init))
+                                                cur-probable-edges (comb/combinations bvs-with-same-hash 2))) prioritized-edges hash-buckets)]
+    (assoc bv-stuff :prioritized-edges new-prioritized-edges :number-of-hashes (inc number-of-hashes))))
 
 (defn add-n-extra-hash-funcs [bv-stuff n]
   (persistent! (reduce (fn [cur-bv-stuff _] (add-an-extra-hash-func cur-bv-stuff)) (transient bv-stuff) (range n))))
