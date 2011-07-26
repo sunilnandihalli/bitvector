@@ -55,30 +55,6 @@
                                             tr-id1 (reduce assign-new-tree-id x (keys tr2))
                                             tr-id2 (reduce assign-new-tree-id x (keys tr1)) x))]
           {:disjoint-mst-coll new-disjoint-mst-coll :nodes-to-mst-id-map new-nodes-to-mst-id-map}))))     
-    
-(defn mst-prim-edges [edges f {:keys [nodes-to-mst-id-map] :as mst}]
-  "this function takes a collection edges all of whose end points collide equal number of times when hashed, it is assumed that all edges whose end points collide more when hashed are necessarily shorter in the hamming distance sense even though it may not be true in reality"
-  (let [all-potential-edges (thrush-with-sym [x] edges
-                              (filter #(let [[tr-id1 tr-id2] (map nodes-to-mst-id-map %)]
-                                         (or (not (and tr-id1 tr-id2)) (not= tr-id1 tr-id2)))  x)
-                              (map (fn [cur-edge] {(f cur-edge) (list cur-edge)}) x)
-                              (apply merge-with into (sorted-map) x))]
-    (loop [[[cur-dist cur-dist-edge-set :as cur-dist-edge-set-pair] & rest-of-dist-edge-set-pairs :as all-dist-edge-set-pairs] (seq all-potential-edges)
-           [cur-dist-edge & rest-of-cur-dist-edges] nil cur-mst mst]
-      (cond
-       cur-dist-edge (recur all-dist-edge-set-pairs rest-of-cur-dist-edges (update-disjoint-mst-coll cur-mst cur-dist-edge))
-       cur-dist-edge-set-pair (recur rest-of-dist-edge-set-pairs (seq cur-dist-edge-set) cur-mst)
-       :else cur-mst))))
-;;---------------------------------------------------------------------
-(defn mst-prim-with-prioritized-edges [{:keys [prioritized-edges] cnt :count :as bv-stuff}]
-  "calculate an approximate minimum spanning tree assuming that edges whose end points have the most collisions are necessarily shorter in terms of hamming distance than the ones whose edges whose endpoints collide fewer number of times"
-  (let [edge-cost #(bit-dist bv-stuff %)
-        {:keys [disjoint-mst-coll nodes-to-mst-id-map] :as mst}
-        (loop [cur-mst {:disjoint-mst-coll (sorted-map) :nodes-to-mst-id-map {}}]
-          (if-not edge-set-pairs-available cur-mst
-                  (recur remaining-priority-edge-set-pairs (mst-prim-edges cur-equal-priority-edge-set edge-cost cur-mst))))]
-    (if (= 1 (count disjoint-mst-coll)) (second (first disjoint-mst-coll))
-        (do (display mst) (throw (Exception. "disjoint-pieces-found-in-mst"))))))
       
 (defn optimize-root-id [{:keys [count bit-vectors] :as bv-stuff} gr]
   "optimize root id such that the permutations of the clonings needed to create the given tree is maximized"
@@ -96,8 +72,7 @@
   ([genealogy] (write-genealogy genealogy "parents.out")))
                        
 (defn find-good-tree [{:keys [prioritized-edges] :as bv-stuff}]
-  (let [minimum-spanning-free-tree (mst-prim-with-priority-edges bv-stuff prioritized-edges)
-        {:keys [opt-root-id] :as sol-quality} (optimize-root-id bv-stuff minimum-spanning-free-tree)
+  (let [{:keys [opt-root-id] :as sol-quality} (optimize-root-id bv-stuff minimum-spanning-free-tree)
         genealogy (tr/rooted-acyclic-graph-to-genealogy [minimum-spanning-free-tree opt-root-id])]
     (self-keyed-map sol-quality genealogy)))
 
