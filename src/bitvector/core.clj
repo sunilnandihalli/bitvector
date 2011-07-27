@@ -22,7 +22,7 @@
                        (if (aget bv bv-pos-id)
                          (bit-set hash hash-loc-id) hash)) 0 (map-indexed vector ids)))))
                         
-(defn bit-dist [{memory :distance-memory bit-vectors :bit-vectors} [& [i j]]]
+(defn bit-dist [{bit-vectors :bit-vectors} [& [i j]]]
   "hamming distance between the the bitvectors i and j"
   (prf/prof :bit-dist (let [bit-dist-help (fn [a b]
                                             (loop [[fa & ra] a [fb & rb] b d 0]
