@@ -81,6 +81,9 @@
                             new-front (into rest-of-front unvisited-neighbours)]
                         (recur new-unvisited-nodes new-front)))))))
 
+#_(is-graph-connected {1 #{2} 2 #{3 1} 3 #{2} 4 #{5} 5 #{4 6} 6 #{5}})
+#_(is-graph-connected {1 #{2} 2 #{3 1} 3 #{2 4} 4 #{3 5} 5 #{4 6} 6 #{5}})
+
 (defn edges-of-graph [graph] (mapcat (fn [[node neighbours]] (keep #(if (< % node) (set node %)) neighbours)) graph))
                                                            
 (let [alpha 2.955765 beta 0.5349485 ln-alpha (mfn/log alpha) ln-beta (mfn/log beta)
@@ -105,9 +108,9 @@
                                         [{} -1] genealogy)]
     (self-keyed-map acyclic-graph root-id)))
 
-(defn rooted-acyclic-graph-to-genealogy [[graph root-id]]
-  {:pre [(is-graph-connected graph)]}
-  (loop [genealogy (sorted-map root-id -1) cur-graph graph [cur-root & rest-of-roots] [root-id]]
+(defn rooted-acyclic-graph-to-genealogy [{:keys [acyclic-graph root-id]}]
+  {:pre [acyclic-graph root-id (if-not (is-graph-connected acyclic-graph) (do (display acyclic-graph) nil) true)]}
+  (loop [genealogy (sorted-map root-id -1) cur-graph acyclic-graph [cur-root & rest-of-roots] [root-id]]
     (if-not cur-root genealogy
             (let [new-roots (cur-graph cur-root)
                   new-genealogy (reduce #(assoc %1 %2 cur-root) genealogy new-roots)
