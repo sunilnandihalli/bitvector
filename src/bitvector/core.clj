@@ -115,13 +115,17 @@
 (defn find-good-tree [{:keys [delta-number-of-hashes error-percentage] cnt :count :or {delta-number-of-hashes 5 error-percentage 0.1} :as bv-stuff}]
   (let [{:keys [genealogy] :as bv-stuff}
         (loop [{:keys [total-distance prioritized-edges] :as cur-bv-stuff} bv-stuff]
-          (let [{new-dist :total-distance :keys [genealogy n-disjoint-trees] :as new-bv-stuff} (reduce
-                                                                                                (fn [cc-bv-stuff i] 
-                                                                                                  (add-edge-to-tree-ensuring-resulting-tree-is-better-than-original cc-bv-stuff))
-                                                                                                cur-bv-stuff (range (min (count prioritized-edges) cnt)))
-                new-genealogy-size (count genealogy)]
-            (println (self-keyed-map new-dist n-disjoint-trees new-genealogy-size))
-            (if (and (= n-disjoint-trees 1) (= new-genealogy-size cnt) (< (- total-distance new-dist) (* error-percentage cnt))) new-bv-stuff
+          (let [{new-dist :total-distance :keys [genealogy n-disjoint-trees tried-edges number-of-hashes] :as new-bv-stuff}
+                (reduce
+                 (fn [{:keys [tried-edges n-disjoint-trees number-of-hashes total-distance genealogy n-disjoint-trees] :as cc-bv-stuff} i]
+                   (let [n-tried-edges (count tried-edges)
+                         genealogy-size (count genealogy)]
+                     (if (zero? (mod n-tried-edges cnt))
+                       (println (self-keyed-map n-tried-edges n-disjoint-trees number-of-hashes total-distance genealogy-size n-disjoint-trees))))
+                   (add-edge-to-tree-ensuring-resulting-tree-is-better-than-original cc-bv-stuff))
+                 cur-bv-stuff (range (count prioritized-edges)))
+                [new-genealogy-size number-of-edges-tried] [(count genealogy) (count tried-edges)]]
+            (if (and (= n-disjoint-trees 1) (= new-genealogy-size cnt) (< (abs (- total-distance new-dist)) (* error-percentage cnt))) new-bv-stuff
                 (recur (add-n-extra-hash-funcs new-bv-stuff delta-number-of-hashes)))))
         {:keys [acyclic-graph] :as minimum-spanning-free-tree} (tr/genealogy-to-rooted-acyclic-graph genealogy)
         {:keys [opt-root-id] :as sol-quality}  (optimize-root-id bv-stuff minimum-spanning-free-tree)
@@ -160,8 +164,6 @@
         bv (prf/prof :read (read-bit-vectors fname))
         sample-solution-quality (if sample-solution (display (prf/prof :sample-solution-quality (solution-quality bv (read-bit-vector-solution sample-solution)))))
         bv-stuff (prf/prof :calc-hashes (calc-hashes-and-hash-fns bv :approximation-factor 4))
-        _ (display bv-stuff)
-        _ (display sample-solution-quality)
         {:keys [sol-quality genealogy] :as sol} (find-good-tree bv-stuff)]
     (display sol)
     (write-genealogy genealogy solution-fname)))
