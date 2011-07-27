@@ -52,31 +52,45 @@
     (if (= to-be-updated -1) cur-genealogy
         (recur (assoc cur-genealogy to-be-updated prev) (cur-genealogy to-be-updated) to-be-updated))))
 
-(defn add-edge-to-tree-ensuring-resulting-tree-is-better-than-original [{:keys [genealogy tried-edges prioritized-edges total-distance] :as bv-stuff :or {tried-edges #{}}}]
+(defn add-edge-to-tree-ensuring-resulting-tree-is-better-than-original [{:keys [genealogy tried-edges prioritized-edges total-distance] :as bv-stuff
+                                                                         :or {genealogy {} tried-edges #{} total-distance 0}}]
   {:pre [tried-edges genealogy]}
+  #_(println 'add-edge-to-tree-ensuring-resulting-tree-is-better-than-original)
   (let [[[& [s e :as new-edge] :as new-edge-as-set]] (peek prioritized-edges)
-        dist (partial bit-dist bv-stuff)
-        [path-between-end-points-of-new-edge is-disjoint] (loop [cur-s s s-path [s]]
-                                                            (let [cur-parent-s (genealogy cur-s)]
-                                                              (condp = cur-parent-s
-                                                                  -1 (loop [cur-e e e-path [e]]
-                                                                       (let [cur-parent-e (genealogy cur-e)]
-                                                                         (condp = cur-parent-e
-                                                                             -1 [[s-path e-path] (not (= cur-parent-e cur-parent-s))]
-                                                                             s  [[nil (conj e-path s)] true] 
-                                                                             (recur cur-parent-e (cons cur-parent-e e-path)))))
-                                                                  e [[(conj s-path e) nil] true]
-                                                                  (recur cur-parent-s (conj s-path cur-parent-s)))))]
-    (apply assoc bv-stuff :tried-edges (conj tried-edges new-edge-as-set) :prioritized-edges (pop prioritized-edges)
-           (if is-disjoint [:genealogy (-> (move-root-in-genealogy genealogy s) (assoc s e)) :total-distance (+ total-distance (dist new-edge))] 
-               (let [[start-list end-list :as path-edge-list] (map #(partition 2 1 %) path-between-end-points-of-new-edge)
-                     [[d-edg-s _ :as max-edge] max-dist new-edge-end-id] (max-key second (mapcat #(map (fn [edg] [edg (dist edg) %2]) %1) path-edge-list (range)))
-                     new-edge-dist (dist new-edge)]
-                 (if (< new-edge-dist max-dist)
-                   [:total-distance (- (+ total-distance new-edge-dist) max-dist)
-                    :genealogy (-> (assoc genealogy d-edg-s -1)
-                                   (move-root-in-genealogy (nth new-edge new-edge-end-id))
-                                   (assoc (nth new-edge new-edge-end-id) (nth new-edge (case new-edge-end-id 1 0 0 1))))])))))) 
+        _ (clojure.pprint/pprint (self-keyed-map genealogy tried-edges new-edge))
+        [s-parent e-parent] (map (partial find genealogy) new-edge)]
+    (-> (cond 
+         (and s-parent e-parent) (let [_ (println '(and s-parent e-parent))
+                                       dist (partial bit-dist bv-stuff)
+                                       [path-between-end-points-of-new-edge is-disjoint ] (loop [cur-s s s-path [s]]
+                                                                                                 (let [cur-parent-s (genealogy s)]
+                                                                                                   (condp = cur-parent-s
+                                                                                                       -1 (loop [cur-e e e-path [e]]
+                                                                                                            (let [cur-parent-e (genealogy cur-e)]
+                                                                                                              (condp = cur-parent-e
+                                                                                                                  -1 [[s-path e-path] (not (= cur-parent-e cur-parent-s))]
+                                                                                                                  s  [[nil (conj e-path s)] true] 
+                                                                                                                  (recur cur-parent-e (cons cur-parent-e e-path)))))
+                                                                                                       e [[(conj s-path e) nil] true]
+                                                                                                       (recur cur-parent-s (conj s-path cur-parent-s)))))
+                                       _ (println (self-keyed-map path-between-end-points-of-new-edge is-disjoint))]
+                                   (println 'after-path-between-end-points-of-new-edge)
+                                   (apply assoc bv-stuff 
+                                          (if is-disjoint [:genealogy (-> (move-root-in-genealogy genealogy s) (assoc s e)) :total-distance (+ total-distance (dist new-edge))] 
+                                              (let [[start-list end-list :as path-edge-list] (map #(partition 2 1 %) path-between-end-points-of-new-edge)
+                                                    [[d-edg-s _ :as max-edge] max-dist new-edge-end-id] (max-key second (mapcat #(map (fn [edg] [edg (dist edg) %2]) %1)
+                                                                                                                                path-edge-list (range)))
+                                                    new-edge-dist (dist new-edge)]
+                                                (if (< new-edge-dist max-dist)
+                                                  [:total-distance (- (+ total-distance new-edge-dist) max-dist)
+                                                   :genealogy (-> (assoc genealogy d-edg-s -1)
+                                                                  (move-root-in-genealogy (nth new-edge new-edge-end-id))
+                                                                  (assoc (nth new-edge new-edge-end-id) (nth new-edge (case new-edge-end-id 1 0 0 1))))])))))
+         s-parent (assoc-in bv-stuff [:genealogy e] s)
+         e-parent (assoc-in bv-stuff [:genealogy s] e)
+         :else (-> (assoc-in bv-stuff [:genealogy s] e)
+                   (assoc-in [:genealogy e] -1)))
+        (assoc :tried-edges (conj tried-edges new-edge-as-set) :prioritized-edges (pop prioritized-edges)))))
 
 (defn add-an-extra-hash-func [{:keys [bit-vectors hash-length number-of-hashes prioritized-edges tried-edges]
                                :or {prioritized-edges (pm/priority-map-by >) number-of-hashes 0 tried-edges #{}} cnt :count :as bv-stuff}]
@@ -88,16 +102,19 @@
                                                     (if-not (tried-edges se)
                                                       (update-in cur-cur-prioritized-edges [se] inc-or-init) cur-cur-prioritized-edges)))
                                                 cur-prioritized-edges (comb/combinations bvs-with-same-hash 2))) prioritized-edges hash-buckets)]
-    (assoc bv-stuff :prioritized-edges new-prioritized-edges :number-of-hashes (inc number-of-hashes))))
+    (assoc! bv-stuff :prioritized-edges new-prioritized-edges :number-of-hashes (inc number-of-hashes))))
 
 (defn add-n-extra-hash-funcs [bv-stuff n]
   (persistent! (reduce (fn [cur-bv-stuff _] (add-an-extra-hash-func cur-bv-stuff)) (transient bv-stuff) (range n))))
                        
 (defn find-good-tree [{:keys [prioritized-edges count delta-number-of-hashes error-percentage] :or {delta-number-of-hashes 5 error-percentage 0.1} :as bv-stuff}]
+  (println 'in-find-good-tree)
   (let [{:keys [genealogy] :as bv-stuff} (loop [{:keys [total-distance] :as cur-bv-stuff} bv-stuff]
                                            (let [{new-dist :total-distance :as new-bv-stuff}
-                                                 (reduce (fn [cc-bv-stuff _] (add-edge-to-tree-ensuring-resulting-tree-is-better-than-original cc-bv-stuff))
+                                                 (reduce (fn [cc-bv-stuff i] (println (self-keyed-map i))
+                                                           (add-edge-to-tree-ensuring-resulting-tree-is-better-than-original cc-bv-stuff))
                                                          cur-bv-stuff (range count))]
+                                             (println (self-keyed-map new-dist))
                                              (if (< (- new-dist total-distance) (* error-percentage count)) new-bv-stuff
                                                (recur (add-n-extra-hash-funcs new-bv-stuff delta-number-of-hashes)))))
         minimum-spanning-free-tree (tr/genealogy-to-rooted-acyclic-graph genealogy)
@@ -137,17 +154,12 @@
                      n-increments 5 delta-n-hashes 5}}]
   (let [solution-fname (if solution-fname solution-fname (str fname ".my-parents"))
         bv (prf/prof :read (read-bit-vectors fname))
-        sample-solution-quality (if sample-solution (prf/prof :sample-solution-quality (solution-quality bv (read-bit-vector-solution sample-solution))))
-        bv-stuff (prf/prof :calc-hashes (calc-hashes-and-hash-fns bv :approximation-factor 4))]
-    (display sample-solution-quality)
-    (loop [i-increments 0 cur-bv-stuff bv-stuff sol-qualities nil]
-      (let [new-bv-stuff (prf/prof :add-hashes (add-n-extra-hash-funcs cur-bv-stuff delta-n-hashes))
-            {:keys [sol-quality genealogy]} (prf/prof :find-good-tree (find-good-tree new-bv-stuff))]
-        (write-genealogy genealogy (str solution-fname i-increments))
-        (clojure.pprint/pprint (dissoc sol-quality :all-root-log-num-ways))
-        (if (< i-increments n-increments) (recur (inc i-increments) new-bv-stuff (conj sol-qualities sol-quality))
-            (let [reduced-sol-qualities (map #(dissoc % :all-root-log-num-ways) sol-qualities)]
-                  (display reduced-sol-qualities genealogy)))))))
+        sample-solution-quality (if sample-solution (display (prf/prof :sample-solution-quality (solution-quality bv (read-bit-vector-solution sample-solution)))))
+        bv-stuff (prf/prof :calc-hashes (calc-hashes-and-hash-fns bv :approximation-factor 4))
+        {:keys [sol-quality genealogy] :as sol} (find-good-tree bv-stuff)]
+    (display sol)
+    (write-genealogy genealogy solution-fname)))
+    
 
 #_(time (solve :fname "/home/github/bitvector/data/bitvectors-genes.data.small"
                :sample-solution "/home/github/bitvector/data/bitvectors-parents.data.small.txt"))
@@ -169,6 +181,6 @@
     {:distance-memory dist-memory :bit-vectors bit-vectors :count n}))
 
 (defn solve-random
-  ([out-fname] (let [bv-stuff (-> (generate-input-problem 10) (calc-hashes-and-hash-fns :approximation-factor 4))]
+  ([out-fname] (let [bv-stuff (-> (generate-input-problem 5) (calc-hashes-and-hash-fns :approximation-factor 4))]
                  (write-genealogy (find-good-tree bv-stuff) out-fname)))
-  ([] (solve "parents.out")))
+  ([] (solve-random "parents.out")))
