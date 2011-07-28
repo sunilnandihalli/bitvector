@@ -21,16 +21,21 @@
     (fn [bv] (reduce (fn [hash [hash-loc-id bv-pos-id]]
                        (if (aget bv bv-pos-id)
                          (bit-set hash hash-loc-id) hash)) 0 (map-indexed vector ids)))))
+
+(defn disjoint-hash-calculating-function-calculator [dimension-d]
+  (let [shuffled-ids (atom (shuffle (range dimension-d)))]
+    (fn [hash-length]
+      (let [ids (take hash-length @shuffled-ids) indexed-ids (map-indexed vector ids)]
+        (swap! shuffled-ids #(drop hash-length %))
+        (fn [bv] (reduce (fn [hash [hash-loc-id bv-pos-id]]
+                           (if (aget bv bv-pos-id)
+                             (bit-set hash hash-loc-id) hash)) 0 indexed-ids))))))
                         
-(defn bit-dist [{bit-vectors :bit-vectors} [& [i j]]]
+(defn bit-dist [{:keys [bit-vectors]} [& [i j]]]
   "hamming distance between the the bitvectors i and j"
-  (prf/prof :bit-dist (let [bit-dist-help (fn [a b]
-                                            (loop [[fa & ra] a [fb & rb] b d 0]
-                                              (if (not (nil? fa)) (recur ra rb (if (not= fa fb) (inc d) d)) d)))
-                            get-dist (fn [i j] (if-let [[_ v] (find @memory [i j])] v
-                                                       (let [v (bit-dist-help (bit-vectors i) (bit-vectors j))]
-                                                         (swap! memory #(assoc % [i j] v)) v)))]                   
-                        (cond (= i j) 0 (> i j) (get-dist i j) :else (get-dist j i)))))
+  (loop [[fa & ra] (bit-vectors i) [fb & rb] (bit-vectors j) d 0]
+    (if (not (nil? fa)) (recur ra rb (if (not= fa fb) (inc d) d)) d)))
+
       
 (defn optimize-root-id [{:keys [count bit-vectors] :as bv-stuff} {:keys [acyclic-graph]}]
   "optimize root id such that the permutations of the clonings needed to create the given tree is maximized"
@@ -52,49 +57,52 @@
     (if (= to-be-updated -1) cur-genealogy
         (recur (assoc cur-genealogy to-be-updated prev) (cur-genealogy to-be-updated) to-be-updated))))
 
-(defn add-edge-to-tree-ensuring-resulting-tree-is-better-than-original [{:keys [genealogy tried-edges prioritized-edges total-distance n-disjoint-trees] :as bv-stuff}]
-  {:pre [tried-edges genealogy]}
+(defn add-edge-to-tree-ensuring-resulting-tree-is-better-than-original [{:keys [genealogy edges-in-tree tried-edges prioritized-edges total-distance n-disjoint-trees]
+                                                                         :as bv-stuff}]
   (let [[[& [s e :as new-edge] :as new-edge-as-set]] (peek prioritized-edges)
         [s-parent e-parent :as se] (map genealogy new-edge)
         dist (partial bit-dist bv-stuff)
         new-edge-dist (bit-dist bv-stuff new-edge)]
-    (-> (cond 
-         (and s-parent e-parent) (let [[path-between-end-points-of-new-edge is-disjoint] (loop [cur-s s s-path [s]]
-                                                                                           (let [cur-parent-s (genealogy cur-s)]
-                                                                                             (condp = cur-parent-s
-                                                                                                 -1 (loop [cur-e e e-path [e]]
-                                                                                                      (let [cur-parent-e (genealogy cur-e)]
-                                                                                                        (condp = cur-parent-e
-                                                                                                            -1 (let [[trimmed-s-path trimmed-e-path]
-                                                                                                                     (loop [n-s-path s-path n-e-path e-path]
-                                                                                                                       (let [p-s (peek n-s-path)
-                                                                                                                             p-e (peek n-e-path)]
-                                                                                                                         (if (not= p-s p-e)
-                                                                                                                           [(conj n-s-path (genealogy p-s))
-                                                                                                                            (conj n-e-path (genealogy p-e))]
-                                                                                                                           (recur (pop n-s-path) (pop n-e-path)))))] 
-                                                                                                                 [[trimmed-s-path trimmed-e-path] (not (= cur-e cur-s))])
-                                                                                                            s [[nil (conj e-path s)] false] 
-                                                                                                            (recur cur-parent-e (conj e-path cur-parent-e)))))
-                                                                                                 e [[(conj s-path e) nil] false]
-                                                                                                 (recur cur-parent-s (conj s-path cur-parent-s)))))]
-                                   (if is-disjoint (assoc bv-stuff :genealogy (-> (move-root-in-genealogy genealogy s) (assoc s e))
-                                                          :total-distance (+ total-distance new-edge-dist) :n-disjoint-trees (dec n-disjoint-trees)) 
-                                       (let [[start-list end-list :as path-edge-list] (map #(partition 2 1 %) path-between-end-points-of-new-edge)
-                                             [[d-edg-s _ :as max-edge] max-dist new-edge-end-id] (apply max-key second
-                                                                                                        (mapcat #(map (fn [edg] [edg (dist edg) %2]) %1)
-                                                                                                                path-edge-list (range)))]
-                                         (if-not (< new-edge-dist max-dist) bv-stuff
-                                                 (assoc bv-stuff 
-                                                   :genealogy (thrush-with-sym [x] (assoc genealogy d-edg-s -1)
-                                                                (move-root-in-genealogy x (nth new-edge new-edge-end-id))
-                                                                (assoc x (nth new-edge new-edge-end-id) (nth new-edge (case new-edge-end-id 1 0 0 1))))
-                                                   :total-distance (- (+ total-distance new-edge-dist) max-dist))))))
-         s-parent (-> (assoc-in bv-stuff [:genealogy e] s) (assoc :total-distance (+ new-edge-dist total-distance)))
-         e-parent (-> (assoc-in bv-stuff [:genealogy s] e) (assoc :total-distance (+ new-edge-dist total-distance)))
-         :else (-> (assoc-in bv-stuff [:genealogy s] e)
-                   (assoc-in [:genealogy e] -1)
-                   (assoc :total-distance (+ new-edge-dist total-distance) :n-disjoint-trees (inc n-disjoint-trees))))
+    (-> (if (and s-parent e-parent)
+          (let [[path-between-end-points-of-new-edge is-disjoint]
+                (loop [cur-s s s-path [s]]
+                  (let [cur-parent-s (genealogy cur-s)]
+                    (condp = cur-parent-s
+                        -1 (loop [cur-e e e-path [e]]
+                             (let [cur-parent-e (genealogy cur-e)]
+                               (condp = cur-parent-e
+                                   -1 (let [[trimmed-s-path trimmed-e-path]
+                                            (loop [n-s-path s-path n-e-path e-path]
+                                              (let [p-s (peek n-s-path) p-e (peek n-e-path)]
+                                                (if (not= p-s p-e)
+                                                  [(conj n-s-path (genealogy p-s)) (conj n-e-path (genealogy p-e))]
+                                                  (recur (pop n-s-path) (pop n-e-path)))))] 
+                                        [[trimmed-s-path trimmed-e-path] (not (= cur-e cur-s))])
+                                   s [[nil (conj e-path s)] false] 
+                                   (recur cur-parent-e (conj e-path cur-parent-e)))))
+                        e [[(conj s-path e) nil] false]
+                        (recur cur-parent-s (conj s-path cur-parent-s)))))]
+            (if is-disjoint (assoc bv-stuff :genealogy (-> (move-root-in-genealogy genealogy s) (assoc s e)) :edges-in-tree (assoc edges-in-tree new-edge-as-set new-edge-dist)
+                                   :total-distance (+ total-distance new-edge-dist) :n-disjoint-trees (dec n-disjoint-trees)) 
+                (let [[start-list end-list :as path-edge-list] (map #(partition 2 1 %) path-between-end-points-of-new-edge)
+                      [[d-edg-s _ :as max-edge] max-dist new-edge-end-id] (apply max-key second
+                                                                                 (mapcat #(map (fn [edg] [edg (edges-in-tree (set edg)) %2]) %1)
+                                                                                         path-edge-list (range)))]
+                  (if-not (< new-edge-dist max-dist) bv-stuff
+                          (assoc bv-stuff
+                            :edges-in-tree (-> (assoc edges-in-tree new-edge-as-set new-edge-dist) (dissoc (set max-edge)))
+                            :genealogy (thrush-with-sym [x] (assoc genealogy d-edg-s -1)
+                                         (move-root-in-genealogy x (nth new-edge new-edge-end-id))
+                                         (assoc x (nth new-edge new-edge-end-id) (nth new-edge (case new-edge-end-id 1 0 0 1))))
+                            :total-distance (- (+ total-distance new-edge-dist) max-dist))))))
+          (thrush-with-sym [x]
+            (assoc bv-stuff :total-distance (+ new-edge-dist total-distance) :edges-in-tree (assoc edges-in-tree new-edge-as-set new-edge-dist))
+            (cond 
+             s-parent (assoc-in x [:genealogy e] s)
+             e-parent (assoc-in x [:genealogy s] e)
+             :else (-> (assoc-in x [:genealogy s] e)
+                       (assoc-in [:genealogy e] -1)
+                       (assoc :n-disjoint-trees (inc n-disjoint-trees))))))
         (assoc :tried-edges (conj tried-edges new-edge-as-set) :prioritized-edges (pop prioritized-edges)))))
 
 (defn add-an-extra-hash-func [{:keys [bit-vectors hash-length number-of-hashes prioritized-edges tried-edges]
@@ -132,12 +140,38 @@
         genealogy (tr/rooted-acyclic-graph-to-genealogy {:acyclic-graph acyclic-graph :root-id opt-root-id})]
     (self-keyed-map sol-quality genealogy)))
 
+(into (pm/priority-map-by >) [[:a 2] [:b 1] [:c 0] [:d 1.4]])
+   
+(defn find-good-tree-new [{:keys [delta-number-of-hashes error-percentage] cnt :count :or {delta-number-of-hashes 5 error-percentage 0.1} :as bv-stuff}]
+  (let [{:keys [genealogy] :as bv-stuff}
+        (loop [{:keys [total-distance prioritized-edges] :as cur-bv-stuff} bv-stuff]
+          (let [{new-dist :total-distance :keys [genealogy n-disjoint-trees tried-edges number-of-hashes] :as new-bv-stuff}
+                (loop [{:keys [tried-edges n-disjoint-trees number-of-hashes total-distance genealogy n-disjoint-trees] :as cc-bv-stuff} bv-stuff
+                       number-of-iterations-before-printing cnt
+                       
+                (reduce
+                 (fn [{:keys [tried-edges n-disjoint-trees number-of-hashes total-distance genealogy n-disjoint-trees] :as cc-bv-stuff} i]
+                   (let [n-tried-edges (count tried-edges)
+                         genealogy-size (count genealogy)]
+                     (if (zero? (mod n-tried-edges cnt))
+                       (println (self-keyed-map n-tried-edges n-disjoint-trees number-of-hashes total-distance genealogy-size n-disjoint-trees))))
+                   (add-edge-to-tree-ensuring-resulting-tree-is-better-than-original cc-bv-stuff))
+                 cur-bv-stuff (range (count prioritized-edges)))
+                [new-genealogy-size number-of-edges-tried] [(count genealogy) (count tried-edges)]]
+            (if (and (= n-disjoint-trees 1) (= new-genealogy-size cnt) (< (abs (- total-distance new-dist)) (* error-percentage cnt))) new-bv-stuff
+                (recur (add-n-extra-hash-funcs new-bv-stuff delta-number-of-hashes)))))
+        {:keys [acyclic-graph] :as minimum-spanning-free-tree} (tr/genealogy-to-rooted-acyclic-graph genealogy)
+        {:keys [opt-root-id] :as sol-quality}  (optimize-root-id bv-stuff minimum-spanning-free-tree)
+        genealogy (tr/rooted-acyclic-graph-to-genealogy {:acyclic-graph acyclic-graph :root-id opt-root-id})]
+    (self-keyed-map sol-quality genealogy)))
+
+
 (defn calc-hashes-and-hash-fns [{:keys [bit-vectors] cnt :count :as bv-stuff} & {:keys [approximation-factor theta-const hash-length number-of-hashes]
                                                                                  :or {approximation-factor 4 theta-const 2}}]
   "calculate the hash functions and store the bit-vector ids in the corresponding buckets"
   (let [number-of-hashes (or number-of-hashes (* theta-const (mfn/pow cnt (/ 1 approximation-factor))))
         hash-length (or hash-length (/ number-of-hashes theta-const))]
-    (add-n-extra-hash-funcs (assoc bv-stuff :hash-length hash-length :genealogy {} :total-distance 0 :n-disjoint-trees 0 :tried-edges #{}) number-of-hashes)))
+    (add-n-extra-hash-funcs (assoc bv-stuff :hash-length hash-length :genealogy {} :total-distance 0 :edges-in-tree {} :n-disjoint-trees 0 :tried-edges #{}) number-of-hashes)))
 
 (defn read-bit-vectors [fname]
   "read the bit vectors from the file"
