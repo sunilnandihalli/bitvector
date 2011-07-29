@@ -15,14 +15,8 @@
 
 (defn abs [x] (if (< x 0) (- x) x))
            
-(defn hash-calculating-func [hash-length dimension-d]
-  "a function to return a randomly generated locality sensitive hash function as described in Motwani et. al."
-  (let [ids (take hash-length (shuffle (range dimension-d)))]
-    (fn [bv] (reduce (fn [hash [hash-loc-id bv-pos-id]]
-                       (if (aget bv bv-pos-id)
-                         (bit-set hash hash-loc-id) hash)) 0 (map-indexed vector ids)))))
-
 (defn disjoint-hash-calculating-function-calculator [dimension-d]
+  "a function to return a randomly generated locality sensitive hash function as described in Motwani et. al."
   (let [shuffled-ids (atom (shuffle (range dimension-d)))]
     (fn [hash-length]
       (let [ids (take hash-length @shuffled-ids) indexed-ids (map-indexed vector ids)]
