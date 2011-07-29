@@ -140,32 +140,6 @@
         genealogy (tr/rooted-acyclic-graph-to-genealogy {:acyclic-graph acyclic-graph :root-id opt-root-id})]
     (self-keyed-map sol-quality genealogy)))
 
-(into (pm/priority-map-by >) [[:a 2] [:b 1] [:c 0] [:d 1.4]])
-   
-(defn find-good-tree-new [{:keys [delta-number-of-hashes error-percentage] cnt :count :or {delta-number-of-hashes 5 error-percentage 0.1} :as bv-stuff}]
-  (let [{:keys [genealogy] :as bv-stuff}
-        (loop [{:keys [total-distance prioritized-edges] :as cur-bv-stuff} bv-stuff]
-          (let [{new-dist :total-distance :keys [genealogy n-disjoint-trees tried-edges number-of-hashes] :as new-bv-stuff}
-                (loop [{:keys [tried-edges n-disjoint-trees number-of-hashes total-distance genealogy n-disjoint-trees] :as cc-bv-stuff} bv-stuff
-                       number-of-iterations-before-printing cnt
-                       
-                (reduce
-                 (fn [{:keys [tried-edges n-disjoint-trees number-of-hashes total-distance genealogy n-disjoint-trees] :as cc-bv-stuff} i]
-                   (let [n-tried-edges (count tried-edges)
-                         genealogy-size (count genealogy)]
-                     (if (zero? (mod n-tried-edges cnt))
-                       (println (self-keyed-map n-tried-edges n-disjoint-trees number-of-hashes total-distance genealogy-size n-disjoint-trees))))
-                   (add-edge-to-tree-ensuring-resulting-tree-is-better-than-original cc-bv-stuff))
-                 cur-bv-stuff (range (count prioritized-edges)))
-                [new-genealogy-size number-of-edges-tried] [(count genealogy) (count tried-edges)]]
-            (if (and (= n-disjoint-trees 1) (= new-genealogy-size cnt) (< (abs (- total-distance new-dist)) (* error-percentage cnt))) new-bv-stuff
-                (recur (add-n-extra-hash-funcs new-bv-stuff delta-number-of-hashes)))))
-        {:keys [acyclic-graph] :as minimum-spanning-free-tree} (tr/genealogy-to-rooted-acyclic-graph genealogy)
-        {:keys [opt-root-id] :as sol-quality}  (optimize-root-id bv-stuff minimum-spanning-free-tree)
-        genealogy (tr/rooted-acyclic-graph-to-genealogy {:acyclic-graph acyclic-graph :root-id opt-root-id})]
-    (self-keyed-map sol-quality genealogy)))
-
-
 (defn calc-hashes-and-hash-fns [{:keys [bit-vectors] cnt :count :as bv-stuff} & {:keys [approximation-factor theta-const hash-length number-of-hashes]
                                                                                  :or {approximation-factor 4 theta-const 2}}]
   "calculate the hash functions and store the bit-vector ids in the corresponding buckets"
