@@ -99,7 +99,7 @@
                        (assoc :n-disjoint-trees (inc n-disjoint-trees))))))
         (assoc :tried-edges (conj tried-edges new-edge-as-set) :prioritized-edges (pop prioritized-edges)))))
 
-(defn add-an-extra-hash-func [{:keys [bit-vectors hash-length number-of-hashes prioritized-edges tried-edges]
+(defn add-an-extra-hash-func [{:keys [bit-vectors hash-length number-of-hashes prioritized-edges tried-edges disjoint-hash-func-calculator]
                                :or {prioritized-edges (pm/priority-map-by >) number-of-hashes 0 tried-edges #{}} cnt :count :as bv-stuff}]
   (let [new-hash-func (hash-calculating-func hash-length cnt)
         hash-buckets (persistent! (reduce (fn [cur-hash-buckets [id bv]] (non-std-update! cur-hash-buckets (new-hash-func bv) #(conj % id))) (transient {}) bit-vectors))
@@ -139,7 +139,8 @@
   "calculate the hash functions and store the bit-vector ids in the corresponding buckets"
   (let [number-of-hashes (or number-of-hashes (* theta-const (mfn/pow cnt (/ 1 approximation-factor))))
         hash-length (or hash-length (/ number-of-hashes theta-const))]
-    (add-n-extra-hash-funcs (assoc bv-stuff :hash-length hash-length :genealogy {} :total-distance 0 :edges-in-tree {} :n-disjoint-trees 0 :tried-edges #{}) number-of-hashes)))
+    (add-n-extra-hash-funcs (assoc bv-stuff :hash-length hash-length :genealogy {} :disjoint-hash-func-calculator (disjoint-hash-calculating-function-calculator cnt)
+                                   :total-distance 0 :edges-in-tree {} :n-disjoint-trees 0 :tried-edges #{}) number-of-hashes)))
 
 (defn read-bit-vectors [fname]
   "read the bit vectors from the file"
