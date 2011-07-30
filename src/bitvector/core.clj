@@ -105,9 +105,9 @@
                        (assoc :n-disjoint-trees (inc n-disjoint-trees))))))
         (assoc :tried-edges (conj tried-edges new-edge-as-set) :prioritized-edges (pop prioritized-edges)))))
 
-(defn add-an-extra-hash-func [{:keys [bit-vectors hash-length number-of-hashes prioritized-edges tried-edges]
+(defn add-an-extra-hash-func [{:keys [bit-vectors hash-length number-of-hashes prioritized-edges tried-edges disjoint-hash-func-calculator]
                                :or {prioritized-edges (pm/priority-map-by >) number-of-hashes 0 tried-edges #{}} cnt :count :as bv-stuff}]
-  (let [new-hash-func (hash-calculating-func hash-length cnt)
+  (let [new-hash-func (disjoint-hash-func-calculator hash-length)
         hash-buckets (persistent! (reduce (fn [cur-hash-buckets [id bv]] (non-std-update! cur-hash-buckets (new-hash-func bv) #(conj % id))) (transient {}) bit-vectors))
         new-prioritized-edges (reduce (fn [cur-prioritized-edges [hash-val bvs-with-same-hash]]
                                         (reduce (fn [cur-cur-prioritized-edges e]
@@ -136,7 +136,7 @@
             (if (and (= n-disjoint-trees 1) (= new-genealogy-size cnt) (< (abs (- total-distance new-dist)) (* error-percentage cnt))) new-bv-stuff
                 (recur (add-n-extra-hash-funcs new-bv-stuff delta-number-of-hashes)))))
         {:keys [acyclic-graph] :as minimum-spanning-free-tree} (tr/genealogy-to-rooted-acyclic-graph genealogy)
-        {:keys [opt-root-id] :as sol-quality}  (optimize-root-id bv-stuff minimum-spanning-free-tree)
+        {:keys [opt-root-id] :as sol-quality} (optimize-root-id bv-stuff minimum-spanning-free-tree)
         genealogy (tr/rooted-acyclic-graph-to-genealogy {:acyclic-graph acyclic-graph :root-id opt-root-id})]
     (self-keyed-map sol-quality genealogy)))
 
@@ -145,7 +145,9 @@
   "calculate the hash functions and store the bit-vector ids in the corresponding buckets"
   (let [number-of-hashes (or number-of-hashes (* theta-const (mfn/pow cnt (/ 1 approximation-factor))))
         hash-length (or hash-length (/ number-of-hashes theta-const))]
-    (add-n-extra-hash-funcs (assoc bv-stuff :hash-length hash-length :genealogy {} :total-distance 0 :edges-in-tree {} :n-disjoint-trees 0 :tried-edges #{}) number-of-hashes)))
+    (add-n-extra-hash-funcs (assoc bv-stuff :hash-length hash-length :genealogy {} :total-distance 0
+                                   :disjoint-hash-func-calculator (disjoint-hash-calculating-function-calculator cnt)
+                                   :edges-in-tree {} :n-disjoint-trees 0 :tried-edges #{}) number-of-hashes)))
 
 (defn read-bit-vectors [fname]
   "read the bit vectors from the file"
