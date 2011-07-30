@@ -76,8 +76,10 @@
                                    (recur cur-parent-e (conj e-path cur-parent-e)))))
                         e [[(conj s-path e) nil] false]
                         (recur cur-parent-s (conj s-path cur-parent-s)))))]
-            (if is-disjoint (assoc bv-stuff :genealogy (-> (move-root-in-genealogy genealogy s) (assoc s e)) :edges-in-tree (assoc edges-in-tree new-edge-as-set new-edge-dist)
-                                   :total-distance (+ total-distance new-edge-dist) :n-disjoint-trees (dec n-disjoint-trees)) 
+            (if is-disjoint (assoc bv-stuff :genealogy (-> (move-root-in-genealogy genealogy s) (assoc s e))
+                                   :edges-in-tree (assoc edges-in-tree new-edge-as-set new-edge-dist)
+                                   :total-distance (+ total-distance new-edge-dist)
+                                   :n-disjoint-trees (dec n-disjoint-trees)) 
                 (let [[start-list end-list :as path-edge-list] (map #(partition 2 1 %) path-between-end-points-of-new-edge)
                       [[d-edg-s _ :as max-edge] max-dist new-edge-end-id] (apply max-key second
                                                                                  (mapcat #(map (fn [edg] [edg (edges-in-tree (set edg)) %2]) %1)
@@ -101,7 +103,7 @@
 
 (defn add-an-extra-hash-func [{:keys [bit-vectors hash-length number-of-hashes prioritized-edges tried-edges disjoint-hash-func-calculator]
                                :or {prioritized-edges (pm/priority-map-by >) number-of-hashes 0 tried-edges #{}} cnt :count :as bv-stuff}]
-  (let [new-hash-func (hash-calculating-func hash-length cnt)
+  (let [new-hash-func (disjoint-hash-func-calculator hash-length)
         hash-buckets (persistent! (reduce (fn [cur-hash-buckets [id bv]] (non-std-update! cur-hash-buckets (new-hash-func bv) #(conj % id))) (transient {}) bit-vectors))
         new-prioritized-edges (reduce (fn [cur-prioritized-edges [hash-val bvs-with-same-hash]]
                                         (reduce (fn [cur-cur-prioritized-edges e]
@@ -113,22 +115,34 @@
 
 (defn add-n-extra-hash-funcs [bv-stuff n]
   (persistent! (reduce (fn [cur-bv-stuff _] (add-an-extra-hash-func cur-bv-stuff)) (transient bv-stuff) (range n))))
-                       
-(defn find-good-tree [{:keys [delta-number-of-hashes error-percentage] cnt :count :or {delta-number-of-hashes 5 error-percentage 0.1} :as bv-stuff}]
-  (let [{:keys [genealogy] :as bv-stuff}
-        (loop [{:keys [total-distance prioritized-edges] :as cur-bv-stuff} bv-stuff]
-          (let [{new-dist :total-distance :keys [genealogy n-disjoint-trees tried-edges number-of-hashes] :as new-bv-stuff}
-                (reduce
-                 (fn [{:keys [tried-edges n-disjoint-trees number-of-hashes total-distance genealogy n-disjoint-trees] :as cc-bv-stuff} i]
-                   (let [n-tried-edges (count tried-edges)
-                         genealogy-size (count genealogy)]
-                     (if (zero? (mod n-tried-edges cnt))
-                       (println (self-keyed-map n-tried-edges n-disjoint-trees number-of-hashes total-distance genealogy-size n-disjoint-trees))))
-                   (add-edge-to-tree-ensuring-resulting-tree-is-better-than-original cc-bv-stuff))
-                 cur-bv-stuff (range (count prioritized-edges)))
-                [new-genealogy-size number-of-edges-tried] [(count genealogy) (count tried-edges)]]
-            (if (and (= n-disjoint-trees 1) (= new-genealogy-size cnt) (< (abs (- total-distance new-dist)) (* error-percentage cnt))) new-bv-stuff
-                (recur (add-n-extra-hash-funcs new-bv-stuff delta-number-of-hashes)))))
+
+(defn display-convergence-info [{:keys [number-of-hashes tried-edges n-disjoint-trees genealogy prioritized-edges total-distance] :as bv-stuff}]
+  (let [[_ cur-highest-edge-collisions] (peek prioritized-edges)
+        genealogy-size (count genealogy)
+        n-tried-edges (count tried-edges)]
+    (println (self-keyed-map number-of-hashes n-tried-edges cur-highest-edge-collisions genealogy-size total-distance))))
+  
+
+(defn find-good-tree [{:keys [delta-number-of-hashes] cnt :count :or {delta-number-of-hashes 5} :as bv-stuff}]
+  (let [best-to-worst-ratio 0.5
+        {:keys [genealogy] :as good-bv-stuff}
+        (loop [{:keys [number-of-hashes] :as cur-bv-stuff} bv-stuff best-tried-priority nil]
+          (display-convergence-info cur-bv-stuff)
+          (let [{:keys [best-tried-priority] {:keys [prioritized-edges n-disjoint-trees genealogy] :as bv-stuff} :bv-stuff}
+                (loop [cc-bv-stuff cur-bv-stuff cur-best-tried-priority best-tried-priority]
+                  (let [{:keys [prioritized-edges n-disjoint-trees genealogy] :as ccc-bv-stuff} (add-edge-to-tree-ensuring-resulting-tree-is-better-than-original cc-bv-stuff)]
+                    (if (empty? prioritized-edges) {:best-tried-priority cur-best-tried-priority :bv-stuff ccc-bv-stuff}
+                        (let [[_  cur-priority-of-edges] (peek prioritized-edges)
+                              currently-tried-priority (/ cur-priority-of-edges number-of-hashes)]
+                          (if (or (not= n-disjoint-trees 1) (not= (count genealogy) cnt)
+                                  (not cur-best-tried-priority) (>= currently-tried-priority (* best-to-worst-ratio cur-best-tried-priority)))
+                            (recur ccc-bv-stuff (if cur-best-tried-priority (max currently-tried-priority cur-best-tried-priority) currently-tried-priority))
+                            {:best-tried-priority cur-best-tried-priority :bv-stuff ccc-bv-stuff})))))
+                [_ cur-highest-priority] (peek prioritized-edges)]
+            (if (or (not= n-disjoint-trees 1) (not= (count genealogy) cnt)
+                    (>= (/ (+ (or cur-highest-priority 0) delta-number-of-hashes) (+ number-of-hashes delta-number-of-hashes)) (* best-to-worst-ratio best-tried-priority)))
+              (recur (add-n-extra-hash-funcs bv-stuff delta-number-of-hashes) best-tried-priority) bv-stuff)))
+        _ (display-convergence-info good-bv-stuff)
         {:keys [acyclic-graph] :as minimum-spanning-free-tree} (tr/genealogy-to-rooted-acyclic-graph genealogy)
         {:keys [opt-root-id] :as sol-quality}  (optimize-root-id bv-stuff minimum-spanning-free-tree)
         genealogy (tr/rooted-acyclic-graph-to-genealogy {:acyclic-graph acyclic-graph :root-id opt-root-id})]
