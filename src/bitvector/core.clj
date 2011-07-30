@@ -119,15 +119,14 @@
 
 (defn add-n-extra-hash-funcs [bv-stuff n]
   (persistent! (reduce (fn [cur-bv-stuff _] (add-an-extra-hash-func cur-bv-stuff)) (transient bv-stuff) (range n))))
-                       
+
 (defn find-good-tree [{:keys [delta-number-of-hashes error-percentage] cnt :count :or {delta-number-of-hashes 5 error-percentage 0.1} :as bv-stuff}]
   (let [{:keys [genealogy] :as bv-stuff}
         (loop [{:keys [total-distance prioritized-edges] :as cur-bv-stuff} bv-stuff]
           (let [{new-dist :total-distance :keys [genealogy n-disjoint-trees tried-edges number-of-hashes] :as new-bv-stuff}
                 (reduce
                  (fn [{:keys [tried-edges n-disjoint-trees number-of-hashes total-distance genealogy n-disjoint-trees] :as cc-bv-stuff} i]
-                   (let [n-tried-edges (count tried-edges)
-                         genealogy-size (count genealogy)]
+                   (let [n-tried-edges (count tried-edges) genealogy-size (count genealogy)]
                      (if (zero? (mod n-tried-edges cnt))
                        (println (self-keyed-map n-tried-edges n-disjoint-trees number-of-hashes total-distance genealogy-size n-disjoint-trees))))
                    (add-edge-to-tree-ensuring-resulting-tree-is-better-than-original cc-bv-stuff))
