@@ -68,18 +68,15 @@
                 (loop [cur-s s s-path [s]]
                   (let [cur-parent-s (genealogy cur-s)]
                     (condp = cur-parent-s
-                        -1 (loop [cur-e e e-path [e]]
-                             (let [cur-parent-e (genealogy cur-e)]
-                               (condp = cur-parent-e
-                                   -1 (let [[trimmed-s-path trimmed-e-path]
-                                            (loop [n-s-path s-path n-e-path e-path]
-                                              (let [p-s (peek n-s-path) p-e (peek n-e-path)]
-                                                (if (not= p-s p-e)
-                                                  [(conj n-s-path (genealogy p-s)) (conj n-e-path (genealogy p-e))]
-                                                  (recur (pop n-s-path) (pop n-e-path)))))] 
-                                        [[trimmed-s-path trimmed-e-path] (not (= cur-e cur-s))])
-                                   s [[nil (conj e-path s)] false] 
-                                   (recur cur-parent-e (conj e-path cur-parent-e)))))
+                        -1 (let [s-path-map (into (pm/priority-map) (map vector s-path (range)))]
+                             (loop [cur-e e e-path [e]]
+                               (let [cur-parent-e (genealogy cur-e)]
+                                 (if-let [[_ n-1] (find s-path-map cur-parent-e)]
+                                   [[(vec (take (inc n-1) s-path)) (conj e-path cur-parent-e)] false]                                  
+                                   (condp = cur-parent-e
+                                         -1 [[s-path e-path] true]
+                                         s [[nil (conj e-path s)] false] 
+                                         (recur cur-parent-e (conj e-path cur-parent-e)))))))
                         e [[(conj s-path e) nil] false]
                         (recur cur-parent-s (conj s-path cur-parent-s)))))]
             (if is-disjoint (assoc bv-stuff :genealogy (-> (move-root-in-genealogy genealogy s) (assoc s e)) :edges-in-tree (assoc edges-in-tree new-edge-as-set new-edge-dist)
