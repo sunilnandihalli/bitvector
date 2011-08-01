@@ -57,14 +57,15 @@
     (if (= to-be-updated -1) cur-genealogy
         (recur (assoc cur-genealogy to-be-updated prev) (cur-genealogy to-be-updated) to-be-updated))))
 
-(erk/deferror value-raised [] [val]
-  {:val val
-   :unhandled val})
+#_(erk/deferror value-raised [] [val]
+    {:val val
+     :unhandled val})
 
 (defn add-edge-to-tree-ensuring-resulting-tree-is-better-than-original [{:keys [genealogy edges-in-tree tried-edges prioritized-edges total-distance
                                                                                 n-disjoint-trees start-time max-run-time-nano-seconds] :as bv-stuff}]
   (when (> (- (. System (nanoTime)) start-time) max-run-time-nano-seconds)
-    (erk/raise value-raised bv-stuff))
+    (swap! (:final-answer bv-stuff) (constantly bv-stuff))
+    (throw (Exception. "timed-out")))
   (let [[[& [s e :as new-edge] :as new-edge-as-set]] (peek prioritized-edges)
         [s-parent e-parent :as se] (map genealogy new-edge)
         dist (partial bit-dist bv-stuff)
@@ -126,7 +127,7 @@
 (defn find-good-tree [{:keys [delta-number-of-hashes error-percentage start-time max-run-time-nano-seconds]
                        cnt :count :or {delta-number-of-hashes 5 error-percentage 0.1} :as bv-stuff}]
   (let [{:keys [genealogy] :as bv-stuff}
-        (erk/with-handler
+        (try
           (loop [{:keys [total-distance prioritized-edges] :as cur-bv-stuff} bv-stuff]
             (let [{new-dist :total-distance :keys [genealogy n-disjoint-trees tried-edges number-of-hashes] :as new-bv-stuff}
                   (reduce
@@ -140,8 +141,8 @@
               (if (and (= n-disjoint-trees 1) (= new-genealogy-size cnt)
                        (< (abs (- total-distance new-dist)) (* error-percentage cnt))) new-bv-stuff
                        (recur (add-n-extra-hash-funcs new-bv-stuff delta-number-of-hashes)))))
-          (erk/handle value-raised [v]
-                      (do (println "returning value due to time-out") v)))
+          (catch Exception _
+            @(:final-answer bv-stuff)))
         {:keys [acyclic-graph] :as minimum-spanning-free-tree} (tr/genealogy-to-rooted-acyclic-graph genealogy)
         {:keys [opt-root-id] :as sol-quality} (optimize-root-id bv-stuff minimum-spanning-free-tree)
         genealogy (tr/rooted-acyclic-graph-to-genealogy {:acyclic-graph acyclic-graph :root-id opt-root-id})]
@@ -152,7 +153,7 @@
   "calculate the hash functions and store the bit-vector ids in the corresponding buckets"
   (let [number-of-hashes (or number-of-hashes (* theta-const (mfn/pow cnt (/ 1 approximation-factor))))
         hash-length (or hash-length (/ number-of-hashes theta-const))]
-    (add-n-extra-hash-funcs (assoc bv-stuff :hash-length hash-length :genealogy {} :total-distance 0 
+    (add-n-extra-hash-funcs (assoc bv-stuff :hash-length hash-length :genealogy {} :total-distance 0 :final-answer (atom nil)
                                    :disjoint-hash-func-calculator (disjoint-hash-calculating-function-calculator cnt)
                                    :edges-in-tree {} :n-disjoint-trees 0 :tried-edges #{}) number-of-hashes)))
 
@@ -176,7 +177,7 @@
        (optimize-root-id bv-stuff)))
 
 (defn solve [& {:keys [fname solution-fname sample-solution n-increments delta-n-hashes max-run-time-in-minutes]
-                :or {fname "/home/github/bitvector/data/bitvectors-genes.data.small" max-run-time-in-minutes 0.1}}]
+                :or {fname "/home/github/bitvector/data/bitvectors-genes.data.small" max-run-time-in-minutes 10}}]
   (let [start-time (. System (nanoTime))
         max-run-time-nano-seconds (* max-run-time-in-minutes 60 1e9)
         solution-fname (if solution-fname solution-fname (str fname ".my-parents"))
