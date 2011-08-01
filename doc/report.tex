@@ -66,5 +66,7 @@ In the process of calculating the optimium root id, one needs to be carefull. We
  Firstly, there would be a lot of repetition of computation when the number of ways for a given root is calculated, that are repeated when compared to the evaluation with respect to another root. However, this can be solved using memoization of the values corresponding the sub-trees. \\
 Secondly, even though we are using memoization, if not calculated in the right order, the stack depth can blow due to large number of recursive calls. In order to avoid this, we can use order of the subtrees obtained by progressively removing the edges in their \emph{Prufer Order} and putting them back in the reverse order. \\
  Thirdly, the numbers obtained during the calculation are very huge. In order to get over this problem, I do all the calculations in terms of the logarithms only.
+\subsection{incremental update of the free tree}
+The hashing function serves as a filter that picks a short edge with high probability. So, we consume the edges in the order of highest to lowest and progressively add them to the tree. If the new edge does not create any cycles it is simply added else the cycle that gets created is examined and the worst edge in the cycle is eliminated. This process is repeated as long as we have not run out of time as specified by the user. Then the optimum root is calculated and returned.
 
 \end{document}             % End of document.

@@ -222,4 +222,5 @@
     [[input-file-name ip "input file name"]
      [output-file-name op "output file name"]
      [approximate-maximum-run-time-in-minutes mr "approximate maximum run time in minutes" 10]]
-    (solve :fname input-file-name :solution-fname output-file-name :max-run-time-in-minutes approximate-maximum-run-time-in-minutes)))
+    (if (and input-file-name (or output-file-name (str input-file-name ".parents")))
+      (solve :fname input-file-name :solution-fname output-file-name :max-run-time-in-minutes approximate-maximum-run-time-in-minutes))))
