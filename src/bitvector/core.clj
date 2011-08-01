@@ -1,13 +1,16 @@
 (ns bitvector.core
+  (:gen-class)
   (:require [clojure.java.io :as io]
             [clojure.contrib.combinatorics :as comb]
             [clojure.contrib.generic.math-functions :as mfn]
             [clojure.contrib.profile :as prf]
             [clojure.contrib.error-kit :as erk]
+            [clojure.contrib.command-line :as cl]
             [bitvector.tree-utils :as tr]
             [bitvector.priority-map :as pm])
   (:import [java.io BufferedReader BufferedWriter FileReader])
   (:use bitvector.debug clojure.inspector bitvector.log-utils))
+
 
 (def ^{:doc "probability of mutation during cloning"} mutation-probability 0.2)
 (def ^{:doc "log of the mutation probability"} log-p (mfn/log mutation-probability))
@@ -211,3 +214,12 @@
   ([out-fname] (let [bv-stuff (-> (generate-input-problem 10) (calc-hashes-and-hash-fns :approximation-factor 4))]
                  (write-genealogy (find-good-tree bv-stuff) out-fname)))
   ([] (solve-random "parents.out")))
+
+
+(defn -main [& args]
+  (cl/with-command-line args
+    "usage : bitvector [-ip input-file-name] [-op output-file-name] [-mr approximate-maximum-run-time-in-minutes]"
+    [[input-file-name ip "input file name"]
+     [output-file-name op "output file name"]
+     [approximate-maximum-run-time-in-minutes mr "approximate maximum run time in minutes" 10]]
+    (solve :fname input-file-name :solution-fname output-file-name :max-run-time-in-minutes approximate-maximum-run-time-in-minutes)))
