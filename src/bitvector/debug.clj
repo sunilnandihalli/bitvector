@@ -4,8 +4,27 @@
 	    [clojure.walk :as w]
 	    [clojure.contrib.trace :as t]
             [clojure.contrib.lazy-seqs :as ls])
+  (:import [java.io BufferedReader BufferedWriter FileReader])
   (:use clojure.inspector))
 
+
+#_(gen-class :name bitvector.debug.throwableValue
+           :extends java.lang.Exception
+           :state val
+           :prefix "throwable-value-")
+
+  
+
+
+#_(throwable-value "hello")    
+
+#_(defn throw-value [v err-str]
+    (throw (with-meta (Exception. err-str) {:val v})))
+
+#_(defn hello []
+    (throw-value :hello "jdfsfd"))
+
+#_(try (hello) (catch Exception e (meta e)))
 #_(see (make-array Double/TYPE 3 2))
 #_(clojure.pprint/pprint
    (into-array (map (partial into-array Double/TYPE) [[1 2 3 4] [5 6]])))
@@ -186,9 +205,9 @@
   `(~(symbol (str "add-method-to-" (name multi-fn-name)))
     ~dispatch-val (fn ~args ~@body)))
 	 
-(defmulti-m hello #(even? (apply - %1 %2)))
-(defmethod-m hello 3 [& d] :hello)
-(defmethod-m hello 4 [& d] :heeeeellllllooooooooooo)
+#_(defmulti-m hello #(even? (apply - %1 %2)))
+#_(defmethod-m hello 3 [& d] :hello)
+#_(defmethod-m hello 4 [& d] :heeeeellllllooooooooooo)
 #_(hello 6 7 8 )
 
 (defmacro deep-aget

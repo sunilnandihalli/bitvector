@@ -14,7 +14,8 @@
 (def log-1-p-over-p (- log-1-p log-p))
 
 (defn abs [x] (if (< x 0) (- x) x))
-           
+
+
 (defn hash-calculating-func [hash-length dimension-d]
   "a function to return a randomly generated locality sensitive hash function as described in Motwani et. al."
   (let [ids (take hash-length (shuffle (range dimension-d)))]
@@ -57,8 +58,10 @@
     (if (= to-be-updated -1) cur-genealogy
         (recur (assoc cur-genealogy to-be-updated prev) (cur-genealogy to-be-updated) to-be-updated))))
 
-(defn add-edge-to-tree-ensuring-resulting-tree-is-better-than-original [{:keys [genealogy edges-in-tree tried-edges prioritized-edges total-distance n-disjoint-trees]
-                                                                         :as bv-stuff}]
+(defn add-edge-to-tree-ensuring-resulting-tree-is-better-than-original [{:keys [genealogy edges-in-tree tried-edges prioritized-edges total-distance
+                                                                                n-disjoint-trees start-time max-run-time-nano-seconds] :as bv-stuff}]
+  #_(when (> (- (. System (nanoTime)) start-time) max-run-time-nano-seconds)
+      (throw (throwable-value bv-stuff)))
   (let [[[& [s e :as new-edge] :as new-edge-as-set]] (peek prioritized-edges)
         [s-parent e-parent :as se] (map genealogy new-edge)
         dist (partial bit-dist bv-stuff)
@@ -74,9 +77,9 @@
                                  (if-let [[_ n-1] (find s-path-map cur-parent-e)]
                                    [[(vec (take (inc n-1) s-path)) (conj e-path cur-parent-e)] false]                                  
                                    (condp = cur-parent-e
-                                         -1 [[s-path e-path] true]
-                                         s [[nil (conj e-path s)] false] 
-                                         (recur cur-parent-e (conj e-path cur-parent-e)))))))
+                                       -1 [[s-path e-path] true]
+                                       s [[nil (conj e-path s)] false] 
+                                       (recur cur-parent-e (conj e-path cur-parent-e)))))))
                         e [[(conj s-path e) nil] false]
                         (recur cur-parent-s (conj s-path cur-parent-s)))))]
             (if is-disjoint (assoc bv-stuff :genealogy (-> (move-root-in-genealogy genealogy s) (assoc s e)) :edges-in-tree (assoc edges-in-tree new-edge-as-set new-edge-dist)
@@ -117,7 +120,8 @@
 (defn add-n-extra-hash-funcs [bv-stuff n]
   (persistent! (reduce (fn [cur-bv-stuff _] (add-an-extra-hash-func cur-bv-stuff)) (transient bv-stuff) (range n))))
 
-(defn find-good-tree [{:keys [delta-number-of-hashes error-percentage] cnt :count :or {delta-number-of-hashes 5 error-percentage 0.1} :as bv-stuff}]
+(defn find-good-tree [{:keys [delta-number-of-hashes error-percentage start-time max-run-time-nano-seconds]
+                       cnt :count :or {delta-number-of-hashes 5 error-percentage 0.1} :as bv-stuff}]
   (let [{:keys [genealogy] :as bv-stuff}
         (loop [{:keys [total-distance prioritized-edges] :as cur-bv-stuff} bv-stuff]
           (let [{new-dist :total-distance :keys [genealogy n-disjoint-trees tried-edges number-of-hashes] :as new-bv-stuff}
@@ -129,7 +133,8 @@
                    (add-edge-to-tree-ensuring-resulting-tree-is-better-than-original cc-bv-stuff))
                  cur-bv-stuff (range (count prioritized-edges)))
                 [new-genealogy-size number-of-edges-tried] [(count genealogy) (count tried-edges)]]
-            (if (and (= n-disjoint-trees 1) (= new-genealogy-size cnt) (< (abs (- total-distance new-dist)) (* error-percentage cnt))) new-bv-stuff
+            (if (and (= n-disjoint-trees 1) (= new-genealogy-size cnt)
+                     (< (abs (- total-distance new-dist)) (* error-percentage cnt))) new-bv-stuff
                 (recur (add-n-extra-hash-funcs new-bv-stuff delta-number-of-hashes)))))
         {:keys [acyclic-graph] :as minimum-spanning-free-tree} (tr/genealogy-to-rooted-acyclic-graph genealogy)
         {:keys [opt-root-id] :as sol-quality} (optimize-root-id bv-stuff minimum-spanning-free-tree)
@@ -141,7 +146,7 @@
   "calculate the hash functions and store the bit-vector ids in the corresponding buckets"
   (let [number-of-hashes (or number-of-hashes (* theta-const (mfn/pow cnt (/ 1 approximation-factor))))
         hash-length (or hash-length (/ number-of-hashes theta-const))]
-    (add-n-extra-hash-funcs (assoc bv-stuff :hash-length hash-length :genealogy {} :total-distance 0
+    (add-n-extra-hash-funcs (assoc bv-stuff :hash-length hash-length :genealogy {} :total-distance 0 
                                    :disjoint-hash-func-calculator (disjoint-hash-calculating-function-calculator cnt)
                                    :edges-in-tree {} :n-disjoint-trees 0 :tried-edges #{}) number-of-hashes)))
 
@@ -164,13 +169,17 @@
   (->> (tr/genealogy-to-rooted-acyclic-graph genealogy)
        (optimize-root-id bv-stuff)))
 
-(defn solve [& {:keys [fname solution-fname sample-solution n-increments delta-n-hashes]
-                :or {fname "/home/github/bitvector/data/bitvectors-genes.data.small"}}]
-  (let [solution-fname (if solution-fname solution-fname (str fname ".my-parents"))
-        bv (prf/prof :read (read-bit-vectors fname))
+(defn solve [& {:keys [fname solution-fname sample-solution n-increments delta-n-hashes max-run-time-in-minutes]
+                :or {fname "/home/github/bitvector/data/bitvectors-genes.data.small" max-run-time-in-minutes 0.1}}]
+  (let [start-time (. System (nanoTime))
+        max-run-time-nano-seconds (* max-run-time-in-minutes 60 1e9)
+        solution-fname (if solution-fname solution-fname (str fname ".my-parents"))
+        bv (merge (prf/prof :read (read-bit-vectors fname)) (self-keyed-map start-time max-run-time-nano-seconds)) 
         sample-solution-quality (if sample-solution (display (prf/prof :sample-solution-quality (solution-quality bv (read-bit-vector-solution sample-solution)))))
         bv-stuff (prf/prof :calc-hashes (calc-hashes-and-hash-fns bv :approximation-factor 4))
-        {:keys [sol-quality genealogy] :as sol} (find-good-tree bv-stuff)]
+        {:keys [sol-quality genealogy] :as sol} (try
+                                                  (find-good-tree bv-stuff)
+                                                  (catch java.lang.Throwable e @e))]
     (display sol)
     (write-genealogy genealogy solution-fname)))
     
