@@ -3,6 +3,7 @@
             [clojure.contrib.combinatorics :as comb]
             [clojure.contrib.generic.math-functions :as mfn]
             [clojure.contrib.profile :as prf]
+            [clojure.contrib.error-kit :as erk]
             [bitvector.tree-utils :as tr]
             [bitvector.priority-map :as pm])
   (:import [java.io BufferedReader BufferedWriter FileReader])
@@ -14,7 +15,6 @@
 (def log-1-p-over-p (- log-1-p log-p))
 
 (defn abs [x] (if (< x 0) (- x) x))
-
 
 (defn hash-calculating-func [hash-length dimension-d]
   "a function to return a randomly generated locality sensitive hash function as described in Motwani et. al."
@@ -37,7 +37,6 @@
   (loop [[fa & ra] (bit-vectors i) [fb & rb] (bit-vectors j) d 0]
     (if (not (nil? fa)) (recur ra rb (if (not= fa fb) (inc d) d)) d)))
 
-      
 (defn optimize-root-id [{:keys [count bit-vectors] :as bv-stuff} {:keys [acyclic-graph]}]
   "optimize root id such that the permutations of the clonings needed to create the given tree is maximized"
   (let [{:keys [opt-root-id log-num-ways all-root-log-num-ways]} (tr/most-probable-root-for-a-given-tree acyclic-graph)
@@ -58,10 +57,14 @@
     (if (= to-be-updated -1) cur-genealogy
         (recur (assoc cur-genealogy to-be-updated prev) (cur-genealogy to-be-updated) to-be-updated))))
 
+(erk/deferror value-raised [] [val]
+  {:val val
+   :unhandled val})
+
 (defn add-edge-to-tree-ensuring-resulting-tree-is-better-than-original [{:keys [genealogy edges-in-tree tried-edges prioritized-edges total-distance
                                                                                 n-disjoint-trees start-time max-run-time-nano-seconds] :as bv-stuff}]
-  #_(when (> (- (. System (nanoTime)) start-time) max-run-time-nano-seconds)
-      (throw (throwable-value bv-stuff)))
+  (when (> (- (. System (nanoTime)) start-time) max-run-time-nano-seconds)
+    (erk/raise value-raised bv-stuff))
   (let [[[& [s e :as new-edge] :as new-edge-as-set]] (peek prioritized-edges)
         [s-parent e-parent :as se] (map genealogy new-edge)
         dist (partial bit-dist bv-stuff)
@@ -123,19 +126,22 @@
 (defn find-good-tree [{:keys [delta-number-of-hashes error-percentage start-time max-run-time-nano-seconds]
                        cnt :count :or {delta-number-of-hashes 5 error-percentage 0.1} :as bv-stuff}]
   (let [{:keys [genealogy] :as bv-stuff}
-        (loop [{:keys [total-distance prioritized-edges] :as cur-bv-stuff} bv-stuff]
-          (let [{new-dist :total-distance :keys [genealogy n-disjoint-trees tried-edges number-of-hashes] :as new-bv-stuff}
-                (reduce
-                 (fn [{:keys [tried-edges n-disjoint-trees number-of-hashes total-distance genealogy n-disjoint-trees] :as cc-bv-stuff} i]
-                   (let [n-tried-edges (count tried-edges) genealogy-size (count genealogy)]
-                     (if (zero? (mod n-tried-edges cnt))
-                       (println (self-keyed-map n-tried-edges n-disjoint-trees number-of-hashes total-distance genealogy-size n-disjoint-trees))))
-                   (add-edge-to-tree-ensuring-resulting-tree-is-better-than-original cc-bv-stuff))
-                 cur-bv-stuff (range (count prioritized-edges)))
-                [new-genealogy-size number-of-edges-tried] [(count genealogy) (count tried-edges)]]
-            (if (and (= n-disjoint-trees 1) (= new-genealogy-size cnt)
-                     (< (abs (- total-distance new-dist)) (* error-percentage cnt))) new-bv-stuff
-                (recur (add-n-extra-hash-funcs new-bv-stuff delta-number-of-hashes)))))
+        (erk/with-handler
+          (loop [{:keys [total-distance prioritized-edges] :as cur-bv-stuff} bv-stuff]
+            (let [{new-dist :total-distance :keys [genealogy n-disjoint-trees tried-edges number-of-hashes] :as new-bv-stuff}
+                  (reduce
+                   (fn [{:keys [tried-edges n-disjoint-trees number-of-hashes total-distance genealogy n-disjoint-trees] :as cc-bv-stuff} i]
+                     (let [n-tried-edges (count tried-edges) genealogy-size (count genealogy)]
+                       (if (zero? (mod n-tried-edges cnt))
+                         (println (self-keyed-map n-tried-edges n-disjoint-trees number-of-hashes total-distance genealogy-size n-disjoint-trees))))
+                     (add-edge-to-tree-ensuring-resulting-tree-is-better-than-original cc-bv-stuff))
+                   cur-bv-stuff (range (count prioritized-edges)))
+                  [new-genealogy-size number-of-edges-tried] [(count genealogy) (count tried-edges)]]
+              (if (and (= n-disjoint-trees 1) (= new-genealogy-size cnt)
+                       (< (abs (- total-distance new-dist)) (* error-percentage cnt))) new-bv-stuff
+                       (recur (add-n-extra-hash-funcs new-bv-stuff delta-number-of-hashes)))))
+          (erk/handle value-raised [v]
+                      (do (println "returning value due to time-out") v)))
         {:keys [acyclic-graph] :as minimum-spanning-free-tree} (tr/genealogy-to-rooted-acyclic-graph genealogy)
         {:keys [opt-root-id] :as sol-quality} (optimize-root-id bv-stuff minimum-spanning-free-tree)
         genealogy (tr/rooted-acyclic-graph-to-genealogy {:acyclic-graph acyclic-graph :root-id opt-root-id})]
@@ -177,9 +183,7 @@
         bv (merge (prf/prof :read (read-bit-vectors fname)) (self-keyed-map start-time max-run-time-nano-seconds)) 
         sample-solution-quality (if sample-solution (display (prf/prof :sample-solution-quality (solution-quality bv (read-bit-vector-solution sample-solution)))))
         bv-stuff (prf/prof :calc-hashes (calc-hashes-and-hash-fns bv :approximation-factor 4))
-        {:keys [sol-quality genealogy] :as sol} (try
-                                                  (find-good-tree bv-stuff)
-                                                  (catch java.lang.Throwable e @e))]
+        {:keys [sol-quality genealogy] :as sol} (find-good-tree bv-stuff)]
     (display sol)
     (write-genealogy genealogy solution-fname)))
     
