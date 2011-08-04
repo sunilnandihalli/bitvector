@@ -1,0 +1,557 @@
+<div id="problem-statement"
+><h1
+  >Problem statement</h1
+  ><p
+  >The BitVectors are an ancient and immortal race of 10,000, each with a 10,000 bit genome. The race evolved from a single individual by the following process: 9,999 times a BitVector chosen at random from amongst the population was cloned using an error-prone process that considers each bit independently, and flips it with 0.2 probability.</p
+  ><p
+  >Write a program to guess the reproductive history of BitVectors from their genetic material. The randomly-ordered file bitvectors-genes.data.gz contains a 10,000 bit line for each individual. Your program’s output should be, for each input line, the 0-based line number of that individual’s parent, or -1 if it is the progenitor. Balance performance against probability of mistakes as you see fit.</p
+  ></div
+><div id="problem-analysis"
+><h1
+  >Problem analysis</h1
+  ><p
+  >Firstly, any genealogy can be valid solution to the above problem. However, it may not be a highly probable genealogy, given the bit vectors and the procedure used to used to clone them. So, the problem at hand is to find a highly probable genealogy for the set of bit vectors given to us. The problem can be treated as <em
+    >minimum spanning tree</em
+    > problemwith every node being a bit vector and a link between nodes indicating a parent-child relationship. The weight of the edge is just equal to <em
+    >hamming distance</em
+    > between the two bit vectors. The shorter the hamming distance, the higher the probability that there is a parent-child relationship between the nodes under consideration.</p
+  ><div id="probability-of-parent-child-relationship"
+  ><h2
+    >Probability of parent-child relationship</h2
+    ><p
+    >Let us say that there are two bit vectos <span class="math"
+      ><em
+	>A</em
+	></span
+      > and <span class="math"
+      ><em
+	>B</em
+	></span
+      >, and they are <span class="math"
+      ><em
+	>d</em
+	></span
+      > hamming distance apart, with the length of the bitvector being <span class="math"
+      ><em
+	>n</em
+	></span
+      > and the probability of flipping the bit during the cloning process be <span class="math"
+      ><em
+	>p</em
+	></span
+      >, then the probability that <span class="math"
+      ><em
+	>A</em
+	></span
+      > was the parent of <span class="math"
+      ><em
+	>B</em
+	></span
+      > is given by <span class="math"
+      ><em
+	>p</em
+	><sup
+	>r</sup
+	>(1-<em
+	>p</em
+	>)<sup
+	><em
+	  >n</em
+	  >-<em
+	  >r</em
+	  ></sup
+	></span
+      > . From this expression, it is clear that, smaller the hamming distance, higher is the probability there is parent child relationship among them. One of the key thing to note is that, just because the probability is <span class="math"
+      ><em
+	>p</em
+	></span
+      >, the parent child need not be <span class="math"
+      ><em
+	>n</em
+	><em
+	>p</em
+	></span
+      > bits apart to have a highly probable parent child relation ship. In fact, as long as <span class="math"
+      ><em
+	>p</em
+	></span
+      > is less than <span class="math"
+      >0.5</span
+      >, the closer the bit vectors are higher the probability of parent child relationship. However, if the <span class="math"
+      ><em
+	>p</em
+	></span
+      > exceeds <span class="math"
+      >0.5</span
+      >, then farther the bit vectors, the more probable will be their relationship. As you may have noticed, I have not mentioned as to who would be the parent and who would be the child. The reason for doing so is that both of them can be parent or child with equal probability. So, we can frame the problem as one of just calculating the minimum spanning tree as I mentioned before. However, this would still not resolve as to who was the parent or the child. {Identifying the root of the minimum spanning tree}As mentioned before, any genealogy can be true, it however may not be highly probable. Along the same lines, once the MST is calculated, any one of the nodes can be used as the root node, however, it may not lead to a highly probable genealogy to the given problem. Again to make the genealogy highly probable, we have to chose an appropriate root. This clearly implies that choice of root should maximize the number of ways in which cloning of a given pair of parent and child can happen, to increase the probability of the genealogy hence obtained.</p
+    ><p
+    >{Solution process} The solution process involves two things, first the calculation of the Minimum spanning tree and secondly finding the root of the tree which maximizes the number of ways it can be build the trees. {calculation of the minimum spanning tree}The problem at hand can be considered as the calculation of the minimum spanning tree where the <span class="math"
+      ><em
+	>n</em
+	></span
+      > nodes are present in <span class="math"
+      ><em
+	>n</em
+	></span
+      > dimensional space. Since, this is a very large dimensional problem, and the calcution of the distance can be very expensive. After solving a smaller problem by brute force, and extrapolating it to dimension of the current problem gave me an estimate of about 8 hrs, so this clearly needed an approximate solution. I have used <em
+      >locality sensitive hashing</em
+      > proposed by some of the work by Dr. Indyk Piotr. Locality sensitive hashing hashes nodes which hashes nodes close by to the same bucket with a high probability. Multiple such hashing functions are used. The edges that are formed by taking all combinations of two from any given bucket are considered as highly probable edges. The edges joining two points which collide in the most number of hashed buckets are considered very likely candidates. It is assumed that edges joining two points with larger number of collisions when hashed are always better than those points that collide in fewer hash buckets. This assumption can be false but will more likely be true and is taken for granted to make the problem more tractable. <br
+       /></p
+    ><p
+    >The hashing function used is described here. For any bit vector <span class="math"
+      ><em
+	>x</em
+	></span
+      > , <span class="math"
+      ><em
+	>h</em
+	>(<em
+	>x</em
+	>)</span
+      > is defined as the binary number formed by taking the <span class="math"
+      >{<em
+	>a</em
+	><sub
+	>i</sub
+	>}<sup
+	><em
+	  >th</em
+	  ></sup
+	></span
+      > bit of <span class="math"
+      ><em
+	>x</em
+	></span
+      > for <span class="math"
+      ><em
+	>i</em
+	></span
+      > in <span class="math"
+      >[0,<em
+	>k</em
+	>)</span
+      > . <span class="math"
+      ><em
+	>L</em
+	></span
+      > such hashing functions are chosen. Both, <span class="math"
+      ><em
+	>k</em
+	></span
+      > and <span class="math"
+      ><em
+	>L</em
+	></span
+      > determine the error involved in finding the best edge for our MST. For further details on how <span class="math"
+      ><em
+	>k</em
+	></span
+      > and <span class="math"
+      ><em
+	>L</em
+	></span
+      > were chosen please look at Indyk’s publication. The probability of a given set of links in tree with <span class="math"
+      ><em
+	>n</em
+	></span
+      > nodes and <span class="math"
+      ><em
+	>n</em
+	>-1</span
+      > links with corresponding distances being <span class="math"
+      ><em
+	>d</em
+	><sub
+	>i</sub
+	></span
+      > is given by <span class="math"
+      ><em
+	>prob</em
+	><sub
+	><em
+	  >links</em
+	  ></sub
+	></span
+      > <br
+       /> <span class="math"
+      ><em
+	>Probability</em
+	><sub
+	><em
+	  >links</em
+	  ></sub
+	>=∏<sub
+	><em
+	  >i</em
+	  ><sub
+	  ><em
+	    >link</em
+	    ></sub
+	  >=0</sub
+	><sup
+	><em
+	  >n</em
+	  >-1</sup
+	><em
+	>p</em
+	><sup
+	><em
+	  >d</em
+	  ><sub
+	  >i</sub
+	  ></sup
+	>(1-<em
+	>p</em
+	>)<sup
+	>(<em
+	  >n</em
+	  >-<em
+	  >d</em
+	  ><sub
+	  >i</sub
+	  >)</sup
+	></span
+      ></p
+    ></div
+  ><div id="finding-the-root-id-of-the-mst"
+  ><h2
+    >Finding the root id of the MST</h2
+    ><p
+    >As described before, in order to be able to find the most probable solution, we need to find the root id such that the number ways in which cloning can be done is maximized. The number of ways in which any tree can be created by cloning can be represented as a recursive expression. <br
+       /></p
+    ><p
+    >Let <span class="math"
+      ><em
+	>P</em
+	><sub
+	>T</sub
+	></span
+      > represent the number of ways tree <span class="math"
+      ><em
+	>T</em
+	></span
+      > can be created and <span class="math"
+      ><em
+	>N</em
+	><sub
+	>T</sub
+	></span
+      > represent the number of nodes in it. Let <span class="math"
+      ><em
+	>T</em
+	><sub
+	>c</sub
+	><sup
+	>i</sup
+	></span
+      > represent the <span class="math"
+      ><em
+	>i</em
+	><sup
+	><em
+	  >th</em
+	  ></sup
+	></span
+      > child of tree <span class="math"
+      ><em
+	>T</em
+	></span
+      >. Let <span class="math"
+      ><em
+	>P</em
+	><sub
+	><em
+	  >T</em
+	  ><sub
+	  >c</sub
+	  ></sub
+	><sup
+	>i</sup
+	></span
+      > represent the number of ways the children can be created and <span class="math"
+      ><em
+	>N</em
+	><sub
+	><em
+	  >T</em
+	  ><sub
+	  >c</sub
+	  ></sub
+	><sup
+	>i</sup
+	></span
+      > be the number of nodes in each of those trees. Let <span class="math"
+      ><em
+	>N</em
+	><sub
+	>c</sub
+	></span
+      > be the number of children of the given tree <span class="math"
+      ><em
+	>T</em
+	></span
+      >. The recursive formula to evaluate the <span class="math"
+      ><em
+	>P</em
+	><sub
+	>T</sub
+	></span
+      > and <span class="math"
+      ><em
+	>N</em
+	><sub
+	>T</sub
+	></span
+      > are given by <br
+       /></p
+    ><p
+    ><span class="math"
+      ><em
+	>N</em
+	><sub
+	>T</sub
+	>=1+∑<sub
+	><em
+	  >i</em
+	  >=0</sub
+	><sup
+	><em
+	  >N</em
+	  ><sub
+	  >c</sub
+	  ></sup
+	><em
+	>N</em
+	><sub
+	><em
+	  >T</em
+	  ><sub
+	  >c</sub
+	  ></sub
+	><sup
+	>i</sup
+	></span
+      > The number of ways a given tree can be built is equal to the product of number of ways its child trees can be created multiplied by the number of ways in which <span class="math"
+      ><em
+	>N</em
+	><sub
+	>T</sub
+	>-1</span
+      > positions can be grouped into <span class="math"
+      ><em
+	>k</em
+	></span
+      > groups of size <span class="math"
+      ><em
+	>N</em
+	><sub
+	><em
+	  >T</em
+	  ><sub
+	  >c</sub
+	  ></sub
+	><sup
+	>i</sup
+	></span
+      >. <span class="math"
+      ><em
+	>P</em
+	><sub
+	>T</sub
+	>={∏<sub
+	><em
+	  >i</em
+	  >=0</sub
+	><sup
+	><em
+	  >N</em
+	  ><sub
+	  >c</sub
+	  ></sup
+	>{<em
+	>P</em
+	><sub
+	><em
+	  >T</em
+	  ><sub
+	  >c</sub
+	  ></sub
+	><sup
+	>i</sup
+	>}}\left(\frac{(<em
+	>N</em
+	><sub
+	>T</sub
+	>-1)!}{∏<sub
+	><em
+	  >i</em
+	  >=0</sub
+	><sup
+	><em
+	  >N</em
+	  ><sub
+	  >c</sub
+	  ></sup
+	>{<em
+	>N</em
+	><sub
+	><em
+	  >T</em
+	  ><sub
+	  >c</sub
+	  ></sub
+	><sup
+	>i</sup
+	>}!}\right)</span
+      ></p
+    ></div
+  ><div id="calculating-the-quality-of-a-given-solution"
+  ><h2
+    >Calculating the quality of a given solution</h2
+    ><p
+    >As discussed before, any viable solution is a correct solution, however may not be the most probable solution. So, we need to be able to calculate the probability of a given solution at hand. It is easy to see that probability of a given solution being the actual solution is proprotional to the product of the number of ways a given tree can be built with the product of the probabilities of all the links present in the current tree. This can be calculated as <span class="math"
+      ><em
+	>probability</em
+	>~<em
+	>of</em
+	>~<em
+	>current</em
+	>~<em
+	>solution</em
+	> ∝ <em
+	>P</em
+	><sub
+	>T</sub
+	><em
+	>Probability</em
+	><sub
+	><em
+	  >links</em
+	  ></sub
+	></span
+      > <span class="math"
+      ><em
+	>probability</em
+	>~<em
+	>of</em
+	>~<em
+	>current</em
+	>~<em
+	>solution</em
+	> ∝ \left[∏<sub
+	><em
+	  >i</em
+	  >=0</sub
+	><sup
+	><em
+	  >N</em
+	  ><sub
+	  >c</sub
+	  ></sup
+	>{<em
+	>P</em
+	><sub
+	><em
+	  >T</em
+	  ><sub
+	  >c</sub
+	  ></sub
+	><sup
+	>i</sup
+	>}\left(\frac{(<em
+	>N</em
+	><sub
+	>T</sub
+	>-1)!}{∏<sub
+	><em
+	  >i</em
+	  >=0</sub
+	><sup
+	><em
+	  >N</em
+	  ><sub
+	  >c</sub
+	  ></sup
+	>{<em
+	>N</em
+	><sub
+	><em
+	  >T</em
+	  ><sub
+	  >c</sub
+	  ></sub
+	><sup
+	>i</sup
+	>}!}\right)\right]∏<sub
+	><em
+	  >i</em
+	  ><sub
+	  ><em
+	    >link</em
+	    ></sub
+	  >=0</sub
+	><sup
+	><em
+	  >n</em
+	  >-1</sup
+	><em
+	>p</em
+	><sup
+	><em
+	  >d</em
+	  ><sub
+	  >i</sub
+	  ></sup
+	>(1-<em
+	>p</em
+	>)<sup
+	>(<em
+	  >n</em
+	  >-<em
+	  >d</em
+	  ><sub
+	  >i</sub
+	  >)</sup
+	></span
+      ></p
+    ></div
+  ></div
+><div id="implementation-details"
+><h1
+  >Implementation Details</h1
+  ><p
+  >The solution to this problem is implemented in Clojure. The implementation consists of the hashing function, the modified minimum spanning and the evaluation of the cost function described. The implementation has no additional detail that needs to be added to what is already said for the first two topics. However, the third topic of the calculation of the cost function needs a little more attention.</p
+  ><div id="implementation-of-the-cost-function"
+  ><h2
+    >Implementation of the cost function</h2
+    ><p
+    >The estimation of the cost function involve two pieces, the evaluation of <span class="math"
+      ><em
+	>Probability</em
+	><sub
+	><em
+	  >links</em
+	  ></sub
+	></span
+      > and finding the root that maximizes the number of ways in which the tree can be built. I initially set out to optimizing the cost function as a whole, however it turned out that the contribution from the <span class="math"
+      ><em
+	>Probability</em
+	><sub
+	><em
+	  >links</em
+	  ></sub
+	></span
+      > was more significant and had more variation in it when you chose a different set of links. This helped me to decouple the problem into two pieces, first calculate the MST independently and then just find the optimum root id in the second step. On further thought, I realized that if <span class="math"
+      ><em
+	>p</em
+	>-&gt;0.5</span
+      > we cannot make this simplifying decoupling of the problem. In this situation, root-id will play a more significant role in improving or reduction the probability of the given tree.<br
+       /> In the process of calculating the optimium root id, one needs to be carefull. We would have to calculate the number of ways the tree can be with each node of the tree as root and pick the one that has the highest number of ways to be cloned. However, there are a couple of problems with the above proposition. <br
+       /> Firstly, there would be a lot of repetition of computation when the number of ways for a given root is calculated, that are repeated when compared to the evaluation with respect to another root. However, this can be solved using memoization of the values corresponding the sub-trees. <br
+       /> Secondly, even though we are using memoization, if not calculated in the right order, the stack depth can blow due to large number of recursive calls. In order to avoid this, we can use order of the subtrees obtained by progressively removing the edges in their <em
+      >Prufer Order</em
+      > and putting them back in the reverse order. <br
+       /> Thirdly, the numbers obtained during the calculation are very huge. In order to get over this problem, I do all the calculations in terms of the logarithms only. {incremental update of the free tree}The hashing function serves as a filter that picks a short edge with high probability. So, we consume the edges in the order of highest to lowest and progressively add them to the tree. If the new edge does not create any cycles it is simply added else the cycle that gets created is examined and the worst edge in the cycle is eliminated. This process is repeated as long as we have not run out of time as specified by the user. Then the optimum root is calculated and returned.</p
+    ></div
+  ></div
+>
